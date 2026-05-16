@@ -203,6 +203,62 @@ class _STGeorgeBOQProfile(_Profile):
         return ParsedTransaction(date=date, description=description, amount=amount, raw=dict(row))
 
 
+class _FirstDirectProfile(_Profile):
+    """First Direct (HSBC UK).
+
+    Headers: Date, Description, Amount, Balance
+    Amounts are already signed: negative = debit, positive = credit.
+    """
+    name = "first_direct"
+
+    def match(self, headers: list[str]) -> bool:
+        h = [h.strip().lower() for h in headers]
+        return h[:4] == ["date", "description", "amount", "balance"]
+
+    def parse_row(self, row: dict[str, str]) -> ParsedTransaction:
+        date = _parse_date(row["Date"])
+        description = row.get("Description", "").strip()
+        amount = _parse_amount(row.get("Amount", "0"))
+        return ParsedTransaction(date=date, description=description, amount=amount, raw=dict(row))
+
+
+class _NewdayJLProfile(_Profile):
+    """Newday / John Lewis Finance credit card.
+
+    Headers: Date, Description, Note, Amount(GBP)
+    Amounts are unsigned positives for purchases and must be negated.
+    Refunds/payments appear as negative values and should stay positive.
+    Description = clean merchant name; Note = raw acquirer string.
+    """
+    name = "newday_jl"
+
+    def match(self, headers: list[str]) -> bool:
+        h = [h.strip().lower() for h in headers]
+        return (
+            len(h) >= 4
+            and h[0] == "date"
+            and h[1] == "description"
+            and h[2] == "note"
+            and h[3].startswith("amount")
+        )
+
+    def parse_row(self, row: dict[str, str]) -> ParsedTransaction:
+        date = _parse_date(row["Date"])
+        description = row.get("Description", "").strip()
+        note = row.get("Note", "").strip()
+        # Amount column may be named "Amount(GBP)" or "Amount(EUR)" etc.
+        amt_key = next((k for k in row if k.lower().startswith("amount")), "")
+        raw_amount = _parse_amount(row.get(amt_key, "0"))
+        # Credit card convention: positive = purchase (expense), negative = refund/payment
+        amount = -raw_amount if raw_amount > 0 else abs(raw_amount)
+        return ParsedTransaction(
+            date=date,
+            description=description or note,
+            amount=amount,
+            raw={**dict(row), "_note": note},
+        )
+
+
 class _GenericProfile(_Profile):
     """Fallback: looks for common column names and maps them."""
     name = "generic"
@@ -261,6 +317,8 @@ class _GenericProfile(_Profile):
 
 _PROFILES: list[_Profile] = [
     _MidataProfile(),
+    _NewdayJLProfile(),
+    _FirstDirectProfile(),
     _ANZProfile(),
     _NABProfile(),
     _WestpacProfile(),
