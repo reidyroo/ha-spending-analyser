@@ -43,6 +43,13 @@ import_statement:
       example: "Net Amount"
       selector:
         text:
+    categorise:
+      name: AI categorise
+      description: Run Ollama AI categorisation on import. Set false to skip and leave as Uncategorised.
+      required: false
+      default: true
+      selector:
+        boolean:
 
 add_transaction:
   name: Add Transaction

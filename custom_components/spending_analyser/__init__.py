@@ -11,8 +11,14 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ServiceValidationError
 import homeassistant.helpers.config_validation as cv
 
-from .const import DEFAULT_DB_NAME, DOMAIN, PLATFORMS, SERVICE_ADD_TRANSACTION, SERVICE_IMPORT_STATEMENT, SERVICE_RECATEGORISE
+from .const import (
+    CONF_OLLAMA_HOST, CONF_OLLAMA_MODEL, CONF_OLLAMA_PORT,
+    DEFAULT_DB_NAME, DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_PORT,
+    DEFAULT_CATEGORIES, DOMAIN, PLATFORMS,
+    SERVICE_ADD_TRANSACTION, SERVICE_IMPORT_STATEMENT, SERVICE_RECATEGORISE,
+)
 from .database import SpendingDatabase
+from .ollama_client import OllamaClient
 from .parsers import parse_statement
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,6 +29,7 @@ _SCHEMA_IMPORT = vol.Schema({
     vol.Optional("csv_date_column"): cv.string,
     vol.Optional("csv_description_column"): cv.string,
     vol.Optional("csv_amount_column"): cv.string,
+    vol.Optional("categorise", default=True): cv.boolean,
 })
 
 _SCHEMA_ADD = vol.Schema({
@@ -39,12 +46,11 @@ _SCHEMA_RECATEGORISE = vol.Schema({
 })
 
 
-def _get_db(hass: HomeAssistant) -> SpendingDatabase:
-    """Return the first loaded DB instance (single-entry assumption for now)."""
+def _get_entry_data(hass: HomeAssistant) -> dict:
     domain_data = hass.data.get(DOMAIN, {})
     for entry_data in domain_data.values():
         if isinstance(entry_data, dict) and "db" in entry_data:
-            return entry_data["db"]
+            return entry_data
     raise ServiceValidationError("Spending Analyser integration is not loaded")
 
 
@@ -57,7 +63,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         os.path.join(hass.config.path("spending_analyser"), DEFAULT_DB_NAME),
     )
     db = await SpendingDatabase.async_init(db_path)
-    hass.data[DOMAIN][entry.entry_id] = {"config": entry.data, "db": db}
+
+    ollama = OllamaClient(
+        hass=hass,
+        host=entry.data.get(CONF_OLLAMA_HOST, DEFAULT_OLLAMA_HOST),
+        port=entry.data.get(CONF_OLLAMA_PORT, DEFAULT_OLLAMA_PORT),
+        model=entry.data.get(CONF_OLLAMA_MODEL, DEFAULT_OLLAMA_MODEL),
+    )
+
+    hass.data[DOMAIN][entry.entry_id] = {
+        "config": entry.data,
+        "db": db,
+        "ollama": ollama,
+    }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _register_services(hass)
@@ -73,7 +91,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry_data = hass.data[DOMAIN].pop(entry.entry_id)
         await entry_data["db"].async_close()
 
-    # Remove services when no entries remain
     if not hass.data.get(DOMAIN):
         for svc in (SERVICE_IMPORT_STATEMENT, SERVICE_ADD_TRANSACTION, SERVICE_RECATEGORISE):
             hass.services.async_remove(DOMAIN, svc)
@@ -83,7 +100,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 def _register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_IMPORT_STATEMENT):
-        return  # already registered (multiple entries edge-case)
+        return
 
     async def handle_import(call: ServiceCall) -> None:
         file_path: str = call.data["file_path"]
@@ -105,14 +122,32 @@ def _register_services(hass: HomeAssistant) -> None:
             parse_statement, content, file_path, column_map or None
         )
 
-        db = _get_db(hass)
+        entry_data = _get_entry_data(hass)
+        db: SpendingDatabase = entry_data["db"]
+        ollama: OllamaClient = entry_data["ollama"]
+        do_categorise: bool = call.data.get("categorise", True)
+
+        categories = await db.async_get_categories()
+        category_names = [c["name"] for c in categories] or DEFAULT_CATEGORIES
+        learned_rules = await db.async_get_category_rules() if do_categorise else []
+
         added = skipped = 0
         for tx in transactions:
+            category = tx.category if hasattr(tx, "category") and tx.category != "Uncategorised" else "Uncategorised"
+            ai_confidence: float | None = None
+
+            if do_categorise and category == "Uncategorised":
+                category, ai_confidence = await ollama.async_categorise(
+                    tx.description, category_names, learned_rules
+                )
+
             _, is_dup = await db.async_add_transaction(
                 date=tx.date,
                 description=tx.description,
                 amount=tx.amount,
+                category=category,
                 account=tx.account,
+                ai_confidence=ai_confidence,
                 raw_data=tx.raw,
             )
             if is_dup:
@@ -120,11 +155,15 @@ def _register_services(hass: HomeAssistant) -> None:
             else:
                 added += 1
 
-        _LOGGER.info("Import complete: %d added, %d duplicates skipped (%s)", added, skipped, file_path)
-        hass.bus.async_fire(f"{DOMAIN}_import_complete", {"added": added, "skipped": skipped, "file": file_path})
+        _LOGGER.info("Import: %d added, %d skipped (%s)", added, skipped, file_path)
+        hass.bus.async_fire(
+            f"{DOMAIN}_import_complete",
+            {"added": added, "skipped": skipped, "file": file_path},
+        )
 
     async def handle_add(call: ServiceCall) -> None:
-        db = _get_db(hass)
+        entry_data = _get_entry_data(hass)
+        db: SpendingDatabase = entry_data["db"]
         tx_id, is_dup = await db.async_add_transaction(
             date=call.data["date"],
             description=call.data["description"],
@@ -138,7 +177,8 @@ def _register_services(hass: HomeAssistant) -> None:
             _LOGGER.info("Transaction added (id=%d)", tx_id)
 
     async def handle_recategorise(call: ServiceCall) -> None:
-        db = _get_db(hass)
+        entry_data = _get_entry_data(hass)
+        db: SpendingDatabase = entry_data["db"]
         tx_id: int = call.data["transaction_id"]
         category: str = call.data["category"]
         tx = await db.async_get_transaction(tx_id)

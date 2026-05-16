@@ -35,7 +35,7 @@ HA Instance
     ├── strings.json         # UI labels
     ├── sensor.py            # HA sensor entities (Task 9)
     ├── database.py          # SQLite CRUD layer (Task 3) ✅
-    ├── ollama_client.py     # Ollama REST client (Task 7) — TODO
+    ├── ollama_client.py     # Ollama REST client (Task 7) ✅
     ├── parsers/             # CSV/OFX/QIF importers (Task 4) ✅
     │   ├── __init__.py      #   parse_statement() entry point
     │   ├── base.py          #   ParsedTransaction dataclass
@@ -70,9 +70,9 @@ Bank statement → Upload panel (Task 11) → Parser (Task 4) → SQLite DB (Tas
 | 3 | SQLite transaction database | ✅ Done |
 | 4 | Statement import service (CSV/OFX/QIF) | ✅ Done |
 | 5 | Manual transaction entry service | ✅ Done (folded into Task 4 services) |
-| 6 | Ollama on Surface + Neural Engine verification | ⬜ Pending (user action required) |
-| 7 | Ollama client integration | ⬜ Pending |
-| 8 | Auto-categorisation pipeline with learning | ⬜ Pending |
+| 6 | Ollama on Surface + Neural Engine verification | ✅ Done (user confirmed installed) |
+| 7 | Ollama client integration | ✅ Done |
+| 8 | Auto-categorisation pipeline with learning | ✅ Done (folded into Tasks 7 + import service) |
 | 9 | HA sensor entities for spending metrics | ⬜ Pending |
 | 10 | Lovelace spending dashboard | ⬜ Pending |
 | 11 | Secure file upload panel | ⬜ Pending |
@@ -121,4 +121,4 @@ Copy `custom_components/spending_analyser/` into your HA config's `custom_compon
 
 ---
 
-*Last updated: Tasks 3–5 complete — next: Task 6 user action (Ollama on Surface), then Task 7 (Ollama client)*
+*Last updated: Tasks 3–8 complete — next: Task 9 (HA sensor entities)*
