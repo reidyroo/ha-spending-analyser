@@ -1,0 +1,82 @@
+# HA Spending Analyser — Example Lovelace Dashboard
+#
+# SETUP (one-time):
+# 1. Copy www/spending_analyser/ to your HA config's www/ folder
+# 2. In HA: Settings → Dashboards → Resources → Add resource:
+#      URL:  /local/spending_analyser/spending-dashboard-card.js
+#      Type: JavaScript module
+# 3. Reload the browser (Ctrl+Shift+R)
+# 4. Create a new dashboard and paste this YAML in raw edit mode,
+#    OR add individual cards to an existing dashboard.
+#
+# Entity IDs: HA generates these from the device + sensor name.
+# If they differ, check Settings → Entities and update below.
+
+title: Spending
+path: spending
+icon: mdi:cash-multiple
+views:
+  - title: Overview
+    path: overview
+    icon: mdi:view-dashboard
+    cards:
+
+      # ── Main spending card ────────────────────────────────────────
+      - type: custom:spending-dashboard-card
+        title: Spending Dashboard
+        currency: "£"
+        max_categories: 8
+        spending_entity:      sensor.spending_analyser_monthly_spending
+        income_entity:        sensor.spending_analyser_monthly_income
+        net_entity:           sensor.spending_analyser_monthly_net
+        uncategorised_entity: sensor.spending_analyser_uncategorised_transactions
+        total_entity:         sensor.spending_analyser_total_transactions
+
+      # ── Quick stats row ───────────────────────────────────────────
+      - type: horizontal-stack
+        cards:
+          - type: stat
+            entity: sensor.spending_analyser_monthly_spending
+            name: This Month
+            icon: mdi:cash-minus
+
+          - type: stat
+            entity: sensor.spending_analyser_monthly_income
+            name: Income
+            icon: mdi:cash-plus
+
+          - type: stat
+            entity: sensor.spending_analyser_monthly_net
+            name: Net
+            icon: mdi:bank-transfer
+
+      # ── Top category ──────────────────────────────────────────────
+      - type: entity
+        entity: sensor.spending_analyser_top_spending_category
+        name: Top Spending Category
+        icon: mdi:podium-gold
+
+      # ── Uncategorised alert (only visible when count > 0) ─────────
+      - type: conditional
+        conditions:
+          - condition: numeric_state
+            entity: sensor.spending_analyser_uncategorised_transactions
+            above: 0
+        card:
+          type: markdown
+          content: >
+            ## ⚠ {{ states('sensor.spending_analyser_uncategorised_transactions') }} transactions need categorising
+
+            Use **Developer Tools → Services → spending_analyser.recategorise**
+            to assign categories. Each correction teaches the AI for future imports.
+
+      # ── Import shortcut ───────────────────────────────────────────
+      - type: button
+        name: Import Statement
+        icon: mdi:file-upload-outline
+        tap_action:
+          action: call-service
+          service: spending_analyser.import_statement
+          data:
+            file_path: /config/statements/latest.csv
+            categorise: true
