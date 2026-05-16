@@ -34,7 +34,7 @@ HA Instance
     ├── const.py             # All constants and defaults
     ├── strings.json         # UI labels
     ├── sensor.py            # HA sensor entities (Task 9)
-    ├── database.py          # SQLite CRUD layer (Task 3) — TODO
+    ├── database.py          # SQLite CRUD layer (Task 3) ✅
     ├── ollama_client.py     # Ollama REST client (Task 7) — TODO
     ├── parsers/             # CSV/OFX/QIF importers (Task 4) — TODO
     └── services.yaml        # Service definitions — TODO
@@ -62,8 +62,8 @@ Bank statement → Upload panel (Task 11) → Parser (Task 4) → SQLite DB (Tas
 |---|------|--------|
 | 1 | GitHub repo + project structure | ✅ Done |
 | 2 | HA custom component skeleton | ✅ Done (combined with Task 1) |
-| 3 | SQLite transaction database | ⬜ Next |
-| 4 | Statement import service (CSV/OFX/QIF) | ⬜ Pending |
+| 3 | SQLite transaction database | ✅ Done |
+| 4 | Statement import service (CSV/OFX/QIF) | ⬜ Next |
 | 5 | Manual transaction entry service | ⬜ Pending |
 | 6 | Ollama on Surface + Neural Engine verification | ⬜ Pending (user action required) |
 | 7 | Ollama client integration | ⬜ Pending |
@@ -116,4 +116,4 @@ Copy `custom_components/spending_analyser/` into your HA config's `custom_compon
 
 ---
 
-*Last updated: Task 1 & 2 complete — next: Task 3 (SQLite database layer)*
+*Last updated: Task 3 complete — next: Task 4 (Statement import service CSV/OFX/QIF)*
