@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Spending Analyser Setup",
+        "description": "Configure your local AI spending tracker. All data stays on your network.",
+        "data": {
+          "ollama_host": "Ollama Host (IP or hostname on your LAN)",
+          "ollama_port": "Ollama Port",
+          "ollama_model": "Ollama Model Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach Ollama at the specified host/port. AI categorisation will be unavailable.",
+      "unknown": "Unexpected error during setup."
+    },
+    "abort": {
+      "already_configured": "Spending Analyser is already configured."
+    }
+  }
+}
