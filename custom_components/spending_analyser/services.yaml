@@ -1,0 +1,110 @@
+import_statement:
+  name: Import Bank Statement
+  description: >
+    Parse and import a bank statement file (CSV, OFX, QFX, QIF).
+    Duplicate transactions (matched by date+description+amount hash) are silently skipped.
+  fields:
+    file_path:
+      name: File path
+      description: Absolute path on the HA host to the statement file.
+      required: true
+      example: "/config/statements/june_2024.csv"
+      selector:
+        text:
+    format:
+      name: Format
+      description: "File format. Leave blank to auto-detect from extension/content."
+      required: false
+      example: "csv"
+      selector:
+        select:
+          options:
+            - "csv"
+            - "ofx"
+            - "qif"
+    csv_date_column:
+      name: CSV date column
+      description: Override the date column name for non-standard CSV files.
+      required: false
+      example: "Txn Date"
+      selector:
+        text:
+    csv_description_column:
+      name: CSV description column
+      description: Override the description column name for non-standard CSV files.
+      required: false
+      example: "Details"
+      selector:
+        text:
+    csv_amount_column:
+      name: CSV amount column
+      description: Override the amount column name for non-standard CSV files.
+      required: false
+      example: "Net Amount"
+      selector:
+        text:
+
+add_transaction:
+  name: Add Transaction
+  description: Manually add a single spending transaction.
+  fields:
+    date:
+      name: Date
+      description: Transaction date (YYYY-MM-DD).
+      required: true
+      example: "2024-06-15"
+      selector:
+        date:
+    description:
+      name: Description
+      description: Merchant or transaction description.
+      required: true
+      example: "Woolworths Supermarket"
+      selector:
+        text:
+    amount:
+      name: Amount
+      description: Transaction amount. Use negative for expenses, positive for income.
+      required: true
+      example: -42.50
+      selector:
+        number:
+          min: -1000000
+          max: 1000000
+          step: 0.01
+          mode: box
+    category:
+      name: Category
+      description: Spending category. Defaults to 'Uncategorised'.
+      required: false
+      example: "Groceries"
+      selector:
+        text:
+    account:
+      name: Account
+      description: Account identifier (e.g. last 4 digits of card).
+      required: false
+      example: "1234"
+      selector:
+        text:
+
+recategorise:
+  name: Recategorise Transaction
+  description: Update the category of an existing transaction and teach the AI rule.
+  fields:
+    transaction_id:
+      name: Transaction ID
+      description: The integer ID of the transaction to update.
+      required: true
+      example: 42
+      selector:
+        number:
+          min: 1
+          mode: box
+    category:
+      name: Category
+      description: The new category to assign.
+      required: true
+      example: "Groceries"
+      selector:
+        text:

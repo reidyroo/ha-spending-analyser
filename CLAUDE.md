@@ -36,8 +36,13 @@ HA Instance
     ├── sensor.py            # HA sensor entities (Task 9)
     ├── database.py          # SQLite CRUD layer (Task 3) ✅
     ├── ollama_client.py     # Ollama REST client (Task 7) — TODO
-    ├── parsers/             # CSV/OFX/QIF importers (Task 4) — TODO
-    └── services.yaml        # Service definitions — TODO
+    ├── parsers/             # CSV/OFX/QIF importers (Task 4) ✅
+    │   ├── __init__.py      #   parse_statement() entry point
+    │   ├── base.py          #   ParsedTransaction dataclass
+    │   ├── csv_parser.py    #   midata, CommBank, ANZ, NAB, Westpac, generic
+    │   ├── ofx_parser.py    #   OFX v1 SGML + v2 XML
+    │   └── qif_parser.py    #   QIF
+    └── services.yaml        # Service definitions ✅
 
 www/spending_analyser/       # Lovelace custom card assets (Task 10)
 config/spending_analyser/    # Runtime config overrides
@@ -63,8 +68,8 @@ Bank statement → Upload panel (Task 11) → Parser (Task 4) → SQLite DB (Tas
 | 1 | GitHub repo + project structure | ✅ Done |
 | 2 | HA custom component skeleton | ✅ Done (combined with Task 1) |
 | 3 | SQLite transaction database | ✅ Done |
-| 4 | Statement import service (CSV/OFX/QIF) | ⬜ Next |
-| 5 | Manual transaction entry service | ⬜ Pending |
+| 4 | Statement import service (CSV/OFX/QIF) | ✅ Done |
+| 5 | Manual transaction entry service | ✅ Done (folded into Task 4 services) |
 | 6 | Ollama on Surface + Neural Engine verification | ⬜ Pending (user action required) |
 | 7 | Ollama client integration | ⬜ Pending |
 | 8 | Auto-categorisation pipeline with learning | ⬜ Pending |
@@ -116,4 +121,4 @@ Copy `custom_components/spending_analyser/` into your HA config's `custom_compon
 
 ---
 
-*Last updated: Task 3 complete — next: Task 4 (Statement import service CSV/OFX/QIF)*
+*Last updated: Tasks 3–5 complete — next: Task 6 user action (Ollama on Surface), then Task 7 (Ollama client)*

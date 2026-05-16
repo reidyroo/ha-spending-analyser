@@ -3,14 +3,49 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
+import homeassistant.helpers.config_validation as cv
 
-from .const import DEFAULT_DB_NAME, DOMAIN, PLATFORMS
+from .const import DEFAULT_DB_NAME, DOMAIN, PLATFORMS, SERVICE_ADD_TRANSACTION, SERVICE_IMPORT_STATEMENT, SERVICE_RECATEGORISE
 from .database import SpendingDatabase
+from .parsers import parse_statement
 
 _LOGGER = logging.getLogger(__name__)
+
+_SCHEMA_IMPORT = vol.Schema({
+    vol.Required("file_path"): cv.string,
+    vol.Optional("format"): vol.In(["csv", "ofx", "qif"]),
+    vol.Optional("csv_date_column"): cv.string,
+    vol.Optional("csv_description_column"): cv.string,
+    vol.Optional("csv_amount_column"): cv.string,
+})
+
+_SCHEMA_ADD = vol.Schema({
+    vol.Required("date"): cv.string,
+    vol.Required("description"): cv.string,
+    vol.Required("amount"): vol.Coerce(float),
+    vol.Optional("category", default="Uncategorised"): cv.string,
+    vol.Optional("account"): cv.string,
+})
+
+_SCHEMA_RECATEGORISE = vol.Schema({
+    vol.Required("transaction_id"): vol.Coerce(int),
+    vol.Required("category"): cv.string,
+})
+
+
+def _get_db(hass: HomeAssistant) -> SpendingDatabase:
+    """Return the first loaded DB instance (single-entry assumption for now)."""
+    domain_data = hass.data.get(DOMAIN, {})
+    for entry_data in domain_data.values():
+        if isinstance(entry_data, dict) and "db" in entry_data:
+            return entry_data["db"]
+    raise ServiceValidationError("Spending Analyser integration is not loaded")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -22,13 +57,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         os.path.join(hass.config.path("spending_analyser"), DEFAULT_DB_NAME),
     )
     db = await SpendingDatabase.async_init(db_path)
-
-    hass.data[DOMAIN][entry.entry_id] = {
-        "config": entry.data,
-        "db": db,
-    }
+    hass.data[DOMAIN][entry.entry_id] = {"config": entry.data, "db": db}
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _register_services(hass)
 
     _LOGGER.info("Spending Analyser loaded (entry: %s, db: %s)", entry.entry_id, db_path)
     return True
@@ -40,4 +72,82 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         entry_data = hass.data[DOMAIN].pop(entry.entry_id)
         await entry_data["db"].async_close()
+
+    # Remove services when no entries remain
+    if not hass.data.get(DOMAIN):
+        for svc in (SERVICE_IMPORT_STATEMENT, SERVICE_ADD_TRANSACTION, SERVICE_RECATEGORISE):
+            hass.services.async_remove(DOMAIN, svc)
+
     return unload_ok
+
+
+def _register_services(hass: HomeAssistant) -> None:
+    if hass.services.has_service(DOMAIN, SERVICE_IMPORT_STATEMENT):
+        return  # already registered (multiple entries edge-case)
+
+    async def handle_import(call: ServiceCall) -> None:
+        file_path: str = call.data["file_path"]
+        if not os.path.isfile(file_path):
+            raise ServiceValidationError(f"File not found: {file_path}")
+
+        column_map: dict[str, str] = {}
+        if col := call.data.get("csv_date_column"):
+            column_map["date"] = col
+        if col := call.data.get("csv_description_column"):
+            column_map["description"] = col
+        if col := call.data.get("csv_amount_column"):
+            column_map["amount"] = col
+
+        with open(file_path, "rb") as fh:
+            content = fh.read()
+
+        transactions = await hass.async_add_executor_job(
+            parse_statement, content, file_path, column_map or None
+        )
+
+        db = _get_db(hass)
+        added = skipped = 0
+        for tx in transactions:
+            _, is_dup = await db.async_add_transaction(
+                date=tx.date,
+                description=tx.description,
+                amount=tx.amount,
+                account=tx.account,
+                raw_data=tx.raw,
+            )
+            if is_dup:
+                skipped += 1
+            else:
+                added += 1
+
+        _LOGGER.info("Import complete: %d added, %d duplicates skipped (%s)", added, skipped, file_path)
+        hass.bus.async_fire(f"{DOMAIN}_import_complete", {"added": added, "skipped": skipped, "file": file_path})
+
+    async def handle_add(call: ServiceCall) -> None:
+        db = _get_db(hass)
+        tx_id, is_dup = await db.async_add_transaction(
+            date=call.data["date"],
+            description=call.data["description"],
+            amount=call.data["amount"],
+            category=call.data.get("category", "Uncategorised"),
+            account=call.data.get("account"),
+        )
+        if is_dup:
+            _LOGGER.info("Transaction already exists (id=%d), skipped", tx_id)
+        else:
+            _LOGGER.info("Transaction added (id=%d)", tx_id)
+
+    async def handle_recategorise(call: ServiceCall) -> None:
+        db = _get_db(hass)
+        tx_id: int = call.data["transaction_id"]
+        category: str = call.data["category"]
+        tx = await db.async_get_transaction(tx_id)
+        if not tx:
+            raise ServiceValidationError(f"Transaction {tx_id} not found")
+        await db.async_update_transaction_category(tx_id, category, user_verified=True)
+        await db.async_upsert_category_rule(tx["description"], category)
+        _LOGGER.info("Transaction %d recategorised to '%s'", tx_id, category)
+
+    hass.services.async_register(DOMAIN, SERVICE_IMPORT_STATEMENT, handle_import, schema=_SCHEMA_IMPORT)
+    hass.services.async_register(DOMAIN, SERVICE_ADD_TRANSACTION, handle_add, schema=_SCHEMA_ADD)
+    hass.services.async_register(DOMAIN, SERVICE_RECATEGORISE, handle_recategorise, schema=_SCHEMA_RECATEGORISE)
