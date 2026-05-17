@@ -78,8 +78,8 @@ Bank statement → Upload panel (Task 11) → Parser (Task 4) → SQLite DB (Tas
 | 11 | Secure file upload panel | ✅ Done |
 | 12 | AI deep-analysis report service | ✅ Done |
 | 13 | Security hardening | ✅ Done |
-| 14 | Tests + GitHub Actions CI | ⬜ Pending |
-| 15 | HACS packaging + docs | ⬜ Pending |
+| 14 | Tests + GitHub Actions CI | ✅ Done |
+| 15 | HACS packaging + docs | ✅ Done |
 
 ---
 
@@ -121,4 +121,4 @@ Copy `custom_components/spending_analyser/` into your HA config's `custom_compon
 
 ---
 
-*Last updated: Tasks 3–13 complete — next: Task 14 (tests + CI) or Task 15 (HACS packaging)*
+*Last updated: All tasks (3–15) complete — integration is feature-complete and ready for HA installation.*

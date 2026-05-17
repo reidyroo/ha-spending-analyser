@@ -296,14 +296,16 @@ class _GenericProfile(_Profile):
         if not date_col:
             raise ValueError(f"Cannot find date column in: {list(row.keys())}")
 
-        date = _parse_date(hr[date_col])
-        description = hr.get(desc_col or "", "").strip()
+        # column_map values may be original-case; hr keys are all lowercase
+        date = _parse_date(hr[date_col.lower()])
+        description = hr.get((desc_col or "").lower(), "").strip()
 
-        if amt_col and hr.get(amt_col, "").strip():
-            amount = _parse_amount(hr[amt_col])
+        amt_key = (amt_col or "").lower()
+        if amt_key and hr.get(amt_key, "").strip():
+            amount = _parse_amount(hr[amt_key])
         elif debit_col or credit_col:
-            debit  = _parse_amount(hr.get(debit_col  or "", "") or "0")
-            credit = _parse_amount(hr.get(credit_col or "", "") or "0")
+            debit  = _parse_amount(hr.get((debit_col  or "").lower(), "") or "0")
+            credit = _parse_amount(hr.get((credit_col or "").lower(), "") or "0")
             amount = credit - debit if credit >= debit else -debit + credit
         else:
             raise ValueError(f"Cannot find amount column in: {list(row.keys())}")

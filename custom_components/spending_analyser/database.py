@@ -5,7 +5,7 @@ import hashlib
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any
 
 import aiosqlite
@@ -153,7 +153,7 @@ class SpendingDatabase:
                     import_hash,
                     ai_confidence,
                     json.dumps(raw_data) if raw_data else None,
-                    datetime.utcnow().isoformat(),
+                    datetime.now(UTC).isoformat(),
                 ),
             )
             await self._db.commit()
@@ -273,7 +273,7 @@ class SpendingDatabase:
                ON CONFLICT(pattern) DO UPDATE SET
                    category    = excluded.category,
                    match_count = match_count + 1""",
-            (pattern, category, datetime.utcnow().isoformat()),
+            (pattern, category, datetime.now(UTC).isoformat()),
         )
         await self._db.commit()
 
