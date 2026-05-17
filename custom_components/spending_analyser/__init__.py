@@ -15,12 +15,13 @@ from .const import (
     CONF_OLLAMA_HOST, CONF_OLLAMA_MODEL, CONF_OLLAMA_PORT,
     DEFAULT_DB_NAME, DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_PORT,
     DEFAULT_CATEGORIES, DOMAIN, PLATFORMS,
-    SERVICE_ADD_TRANSACTION, SERVICE_IMPORT_STATEMENT, SERVICE_RECATEGORISE,
+    SERVICE_ADD_TRANSACTION, SERVICE_GENERATE_REPORT, SERVICE_IMPORT_STATEMENT, SERVICE_RECATEGORISE,
 )
 from .database import SpendingDatabase
 from .http_views import SpendingUploadApiView
 from .ollama_client import OllamaClient
 from .parsers import parse_statement
+from .report_generator import ReportGenerator, REPORT_PROMPTS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +45,15 @@ _SCHEMA_ADD = vol.Schema({
 _SCHEMA_RECATEGORISE = vol.Schema({
     vol.Required("transaction_id"): vol.Coerce(int),
     vol.Required("category"): cv.string,
+})
+
+_SCHEMA_REPORT = vol.Schema({
+    vol.Required("prompt"):              vol.In(list(REPORT_PROMPTS)),
+    vol.Optional("category"):            cv.string,
+    vol.Optional("year"):                vol.Coerce(int),
+    vol.Optional("month"):               vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
+    vol.Optional("months_back", default=12): vol.All(vol.Coerce(int), vol.Range(min=1, max=24)),
+    vol.Optional("currency", default="£"): cv.string,
 })
 
 
@@ -94,7 +104,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await entry_data["db"].async_close()
 
     if not hass.data.get(DOMAIN):
-        for svc in (SERVICE_IMPORT_STATEMENT, SERVICE_ADD_TRANSACTION, SERVICE_RECATEGORISE):
+        for svc in (SERVICE_IMPORT_STATEMENT, SERVICE_ADD_TRANSACTION, SERVICE_RECATEGORISE, SERVICE_GENERATE_REPORT):
             hass.services.async_remove(DOMAIN, svc)
         hass.data.pop(f"{DOMAIN}_panel_registered", None)
 
@@ -211,6 +221,54 @@ def _register_services(hass: HomeAssistant) -> None:
         await db.async_upsert_category_rule(tx["description"], category)
         _LOGGER.info("Transaction %d recategorised to '%s'", tx_id, category)
 
+    async def handle_generate_report(call: ServiceCall) -> None:
+        entry_data = _get_entry_data(hass)
+        db: SpendingDatabase = entry_data["db"]
+        ollama: OllamaClient = entry_data["ollama"]
+
+        reports_dir = hass.config.path("spending_analyser", "reports")
+        generator = ReportGenerator(
+            db=db,
+            ollama=ollama,
+            currency=call.data.get("currency", "£"),
+            reports_dir=reports_dir,
+        )
+        try:
+            result = await generator.async_generate(
+                prompt_key=call.data["prompt"],
+                category=call.data.get("category"),
+                year=call.data.get("year"),
+                month=call.data.get("month"),
+                months_back=call.data.get("months_back", 12),
+            )
+        except Exception as exc:
+            _LOGGER.error("Report generation failed: %s", exc)
+            raise ServiceValidationError(str(exc)) from exc
+
+        # Surface as a HA persistent notification so it's visible immediately
+        await hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "title": result["title"],
+                "message": result["text"],
+                "notification_id": f"{DOMAIN}_report",
+            },
+        )
+
+        # Fire event so automations can email / push the report
+        hass.bus.async_fire(
+            f"{DOMAIN}_report_ready",
+            {
+                "title":     result["title"],
+                "prompt":    result["prompt"],
+                "file_path": result.get("file_path"),
+                "text":      result["text"][:500],   # truncated for event bus
+            },
+        )
+        _LOGGER.info("Report '%s' complete. File: %s", result["title"], result.get("file_path"))
+
     hass.services.async_register(DOMAIN, SERVICE_IMPORT_STATEMENT, handle_import, schema=_SCHEMA_IMPORT)
     hass.services.async_register(DOMAIN, SERVICE_ADD_TRANSACTION, handle_add, schema=_SCHEMA_ADD)
     hass.services.async_register(DOMAIN, SERVICE_RECATEGORISE, handle_recategorise, schema=_SCHEMA_RECATEGORISE)
+    hass.services.async_register(DOMAIN, SERVICE_GENERATE_REPORT, handle_generate_report, schema=_SCHEMA_REPORT)

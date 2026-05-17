@@ -122,6 +122,37 @@ class OllamaClient:
         return results
 
     # ------------------------------------------------------------------
+    # Long-form report generation
+    # ------------------------------------------------------------------
+
+    async def async_generate_report(
+        self,
+        system_prompt: str,
+        user_message: str,
+        timeout: int = 120,
+    ) -> str:
+        """Generate a free-text narrative report.
+
+        Uses higher temperature and token budget than categorisation.
+        Returns the model's text response, or raises on failure.
+        """
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_message},
+            ],
+            "stream": False,
+            "options": {
+                "temperature": 0.7,
+                "num_predict": 1024,
+                "top_p": 0.9,
+            },
+        }
+        data = await self._post("/api/chat", payload, timeout=timeout)
+        return data.get("message", {}).get("content", "").strip()
+
+    # ------------------------------------------------------------------
     # HTTP helpers
     # ------------------------------------------------------------------
 

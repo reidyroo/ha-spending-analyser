@@ -76,7 +76,7 @@ Bank statement → Upload panel (Task 11) → Parser (Task 4) → SQLite DB (Tas
 | 9 | HA sensor entities for spending metrics | ✅ Done |
 | 10 | Lovelace spending dashboard | ✅ Done |
 | 11 | Secure file upload panel | ✅ Done |
-| 12 | AI deep-analysis report service | ⬜ Pending |
+| 12 | AI deep-analysis report service | ✅ Done |
 | 13 | Security hardening | ⬜ Pending |
 | 14 | Tests + GitHub Actions CI | ⬜ Pending |
 | 15 | HACS packaging + docs | ⬜ Pending |
@@ -121,4 +121,4 @@ Copy `custom_components/spending_analyser/` into your HA config's `custom_compon
 
 ---
 
-*Last updated: Tasks 3–11 complete — next: Task 14 (tests + CI) or Task 15 (HACS packaging)*
+*Last updated: Tasks 3–12 complete — next: Task 13 (security hardening), 14 (tests + CI), or 15 (HACS packaging)*

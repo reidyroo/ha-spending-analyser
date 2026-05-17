@@ -115,3 +115,83 @@ recategorise:
       example: "Groceries"
       selector:
         text:
+
+generate_report:
+  name: Generate AI Spending Report
+  description: >
+    Ask Ollama to analyse your spending data and generate a narrative report.
+    The report appears as a persistent HA notification and is saved to
+    config/spending_analyser/reports/.
+  fields:
+    prompt:
+      name: Report type
+      description: >
+        Choose the style of analysis. Options:
+        monthly_summary — friendly 2-3 paragraph overview;
+        budget_health — structured Green/Amber/Red health check;
+        savings_tips — top 3 personalised savings recommendations;
+        month_comparison — this month vs last month changes;
+        category_spotlight — deep dive into one category (requires category field);
+        annual_overview — year-to-date patterns and habits.
+      required: true
+      example: "monthly_summary"
+      selector:
+        select:
+          options:
+            - label: "Monthly Summary"
+              value: "monthly_summary"
+            - label: "Budget Health Check"
+              value: "budget_health"
+            - label: "Savings Opportunities"
+              value: "savings_tips"
+            - label: "Month-on-Month Comparison"
+              value: "month_comparison"
+            - label: "Category Deep Dive"
+              value: "category_spotlight"
+            - label: "Year-to-Date Overview"
+              value: "annual_overview"
+    category:
+      name: Category (for Category Deep Dive only)
+      description: The spending category to analyse in depth.
+      required: false
+      example: "Dining & Takeaway"
+      selector:
+        text:
+    year:
+      name: Year
+      description: Year to report on. Defaults to current year.
+      required: false
+      example: 2026
+      selector:
+        number:
+          min: 2000
+          max: 2100
+          mode: box
+    month:
+      name: Month
+      description: Month number (1-12) to report on. Defaults to current month.
+      required: false
+      example: 5
+      selector:
+        number:
+          min: 1
+          max: 12
+          mode: box
+    months_back:
+      name: Months of history (annual overview only)
+      description: How many months of data to include in the year-to-date report.
+      required: false
+      default: 12
+      selector:
+        number:
+          min: 1
+          max: 24
+          mode: box
+    currency:
+      name: Currency symbol
+      description: Currency symbol to display in the report.
+      required: false
+      default: "£"
+      example: "£"
+      selector:
+        text:
