@@ -60,6 +60,80 @@
     margin-bottom: 24px;
   }
 
+  /* Token setup banner */
+  .token-setup {
+    background: rgba(255,152,0,.08);
+    border: 1px solid rgba(255,152,0,.35);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+  }
+  .token-setup.hidden { display: none; }
+  .token-setup-title {
+    font-weight: 700;
+    color: var(--warn);
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+  }
+  .token-setup p { color: var(--text); margin-bottom: 10px; line-height: 1.5; }
+  .token-setup ol { padding-left: 18px; color: var(--text); line-height: 1.8; }
+  .token-setup ol a { color: var(--ha-blue); }
+  .token-input-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .token-input-row input {
+    flex: 1;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.83rem;
+    font-family: monospace;
+  }
+  .token-input-row input:focus { outline: 2px solid var(--ha-blue); border-color: transparent; }
+  .token-save-btn {
+    padding: 9px 16px;
+    background: var(--ha-blue);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .token-save-btn:hover { opacity: .88; }
+
+  /* Token status bar */
+  .token-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 18px;
+    gap: 8px;
+  }
+  .token-status.hidden { display: none; }
+  .token-status .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    flex-shrink: 0;
+  }
+  .token-status .dot.bad { background: var(--error); }
+  .token-status .msg { flex: 1; }
+  .token-change-link {
+    color: var(--ha-blue);
+    cursor: pointer;
+    text-decoration: underline;
+    white-space: nowrap;
+  }
+
   /* Drop zone */
   .drop-zone {
     border: 2px dashed var(--border);
@@ -177,6 +251,29 @@
   <h1>📂 Import Bank Statement</h1>
   <p class="subtitle">Upload a statement file to import transactions into Spending Analyser.</p>
 
+  <!-- Token setup (shown when no saved token) -->
+  <div class="token-setup" id="token-setup">
+    <div class="token-setup-title">🔑 One-time setup: HA access token required</div>
+    <p>This page needs a Long-Lived Access Token to talk to your Home Assistant.</p>
+    <ol>
+      <li>Open <a href="/profile/security" target="_top">your HA profile → Security</a></li>
+      <li>Scroll to <strong>Long-lived access tokens</strong> → <strong>Create token</strong></li>
+      <li>Name it <em>Spending Analyser</em>, copy the token</li>
+      <li>Paste it below and click Save</li>
+    </ol>
+    <div class="token-input-row">
+      <input type="password" id="token-input" placeholder="Paste token here…" autocomplete="off">
+      <button class="token-save-btn" id="token-save-btn">Save</button>
+    </div>
+  </div>
+
+  <!-- Token status (shown when a token is saved) -->
+  <div class="token-status hidden" id="token-status">
+    <span class="dot" id="token-dot"></span>
+    <span class="msg" id="token-msg"></span>
+    <span class="token-change-link" id="token-change-link">Change token</span>
+  </div>
+
   <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
     <div class="drop-icon">📄</div>
     <div class="drop-text">
@@ -215,10 +312,20 @@
 </div>
 
 <script>
-  const dropZone   = document.getElementById('drop-zone');
-  const fileInput  = document.getElementById('file-input');
-  const fileNameEl = document.getElementById('file-name');
-  const uploadBtn  = document.getElementById('upload-btn');
+  const STORAGE_KEY = 'spending_analyser_token';
+
+  const tokenSetup    = document.getElementById('token-setup');
+  const tokenStatus   = document.getElementById('token-status');
+  const tokenDot      = document.getElementById('token-dot');
+  const tokenMsg      = document.getElementById('token-msg');
+  const tokenInput    = document.getElementById('token-input');
+  const tokenSaveBtn  = document.getElementById('token-save-btn');
+  const tokenChangeLink = document.getElementById('token-change-link');
+
+  const dropZone     = document.getElementById('drop-zone');
+  const fileInput    = document.getElementById('file-input');
+  const fileNameEl   = document.getElementById('file-name');
+  const uploadBtn    = document.getElementById('upload-btn');
   const progressBar  = document.getElementById('progress-bar');
   const progressFill = document.getElementById('progress-fill');
   const resultEl     = document.getElementById('result');
@@ -226,6 +333,57 @@
   const resultDetail = document.getElementById('result-detail');
 
   let selectedFile = null;
+
+  /* ── Token management ── */
+  function loadSavedToken() {
+    return localStorage.getItem(STORAGE_KEY) || '';
+  }
+
+  function saveToken(tok) {
+    localStorage.setItem(STORAGE_KEY, tok.trim());
+  }
+
+  function clearToken() {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  function showTokenSetup() {
+    tokenSetup.classList.remove('hidden');
+    tokenStatus.classList.add('hidden');
+  }
+
+  function showTokenStatus(ok, label) {
+    tokenSetup.classList.add('hidden');
+    tokenStatus.classList.remove('hidden');
+    tokenDot.className = 'dot' + (ok ? '' : ' bad');
+    tokenMsg.textContent = label;
+  }
+
+  function refreshTokenUI() {
+    const tok = loadSavedToken();
+    if (tok) {
+      showTokenStatus(true, 'Token saved — ready to import');
+    } else {
+      showTokenSetup();
+    }
+  }
+
+  tokenSaveBtn.addEventListener('click', () => {
+    const val = tokenInput.value.trim();
+    if (!val) return;
+    saveToken(val);
+    tokenInput.value = '';
+    showTokenStatus(true, 'Token saved — ready to import');
+  });
+
+  tokenInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') tokenSaveBtn.click();
+  });
+
+  tokenChangeLink.addEventListener('click', () => {
+    clearToken();
+    showTokenSetup();
+  });
 
   /* ── File selection ── */
   fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
@@ -255,9 +413,10 @@
   uploadBtn.addEventListener('click', async () => {
     if (!selectedFile) return;
 
-    const token = getToken();
+    const token = loadSavedToken();
     if (!token) {
-      showResult('error', 'Not authenticated', 'Could not find a Home Assistant auth token. Please open this page from within the HA UI.');
+      showTokenSetup();
+      showResult('error', 'No token set', 'Please save a Long-Lived Access Token first (see the setup box above).');
       return;
     }
 
@@ -280,6 +439,13 @@
       progressFill.style.width = '100%';
       await new Promise(r => setTimeout(r, 300));
 
+      if (resp.status === 401) {
+        clearToken();
+        showTokenSetup();
+        showResult('error', 'Token rejected (401)', 'The saved token is invalid or expired. Please create a new one and save it again.');
+        return;
+      }
+
       const data = await resp.json();
 
       if (!resp.ok) {
@@ -289,7 +455,7 @@
       } else {
         showResult(
           'success',
-          `✓ Import complete`,
+          '✓ Import complete',
           `${data.added} transaction${data.added !== 1 ? 's' : ''} added` +
           (data.skipped ? `, ${data.skipped} duplicate${data.skipped !== 1 ? 's' : ''} skipped` : '') +
           ` from ${data.filename}`
@@ -321,42 +487,8 @@
   }
   function hideResult() { resultEl.style.display = 'none'; }
 
-  /* ── HA token — multiple fallback strategies ── */
-  function getToken() {
-    // 1. URL query param (set by HA ingress / direct links with ?token=)
-    try {
-      const p = new URLSearchParams(window.location.search);
-      if (p.get('token')) return p.get('token');
-    } catch {}
-
-    // 2. hassTokens in localStorage (same-origin iframe or direct URL)
-    try {
-      const raw = localStorage.getItem('hassTokens');
-      if (raw) {
-        const entries = Object.values(JSON.parse(raw));
-        const tok = entries[0]?.access_token || entries[0]?.token;
-        if (tok) return tok;
-      }
-    } catch {}
-
-    // 3. Parent window localStorage (when running inside HA iframe)
-    try {
-      const raw = window.parent.localStorage.getItem('hassTokens');
-      if (raw) {
-        const entries = Object.values(JSON.parse(raw));
-        const tok = entries[0]?.access_token || entries[0]?.token;
-        if (tok) return tok;
-      }
-    } catch {}
-
-    // 4. hassio-style ingress token in meta tag injected by HA
-    try {
-      const meta = document.querySelector('meta[name="ha-access-token"]');
-      if (meta) return meta.content;
-    } catch {}
-
-    return null;
-  }
+  /* ── Init ── */
+  refreshTokenUI();
 </script>
 </body>
 </html>
