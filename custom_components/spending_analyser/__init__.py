@@ -18,6 +18,7 @@ from .const import (
     SERVICE_ADD_TRANSACTION, SERVICE_IMPORT_STATEMENT, SERVICE_RECATEGORISE,
 )
 from .database import SpendingDatabase
+from .http_views import SpendingUploadApiView
 from .ollama_client import OllamaClient
 from .parsers import parse_statement
 
@@ -79,6 +80,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _register_services(hass)
+    _register_panel(hass)
 
     _LOGGER.info("Spending Analyser loaded (entry: %s, db: %s)", entry.entry_id, db_path)
     return True
@@ -94,8 +96,29 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data.get(DOMAIN):
         for svc in (SERVICE_IMPORT_STATEMENT, SERVICE_ADD_TRANSACTION, SERVICE_RECATEGORISE):
             hass.services.async_remove(DOMAIN, svc)
+        hass.data.pop(f"{DOMAIN}_panel_registered", None)
 
     return unload_ok
+
+
+def _register_panel(hass: HomeAssistant) -> None:
+    """Register the upload UI as a sidebar panel and the API view (idempotent)."""
+    # HTTP view — safe to register multiple times; HA deduplicates by name
+    hass.http.register_view(SpendingUploadApiView())
+
+    # Sidebar iframe panel — skip if already registered
+    from homeassistant.components import frontend
+    if not hass.data.get(f"{DOMAIN}_panel_registered"):
+        frontend.async_register_built_in_panel(
+            hass,
+            component_name="iframe",
+            sidebar_title="Import Statement",
+            sidebar_icon="mdi:file-upload-outline",
+            frontend_url_path="spending-upload",
+            config={"url": "/local/spending_analyser/upload.html"},
+            require_admin=False,
+        )
+        hass.data[f"{DOMAIN}_panel_registered"] = True
 
 
 def _register_services(hass: HomeAssistant) -> None:
