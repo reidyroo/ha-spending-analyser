@@ -14,6 +14,30 @@
 
 ---
 
+## Release Process
+
+Every time code changes are pushed that should be available via HACS auto-update, a new version must be tagged and released. Steps:
+
+1. Bump version in **two files** (must match):
+   - `custom_components/spending_analyser/const.py` → `VERSION = "x.y.z"`
+   - `custom_components/spending_analyser/manifest.json` → `"version": "x.y.z"`
+2. Commit: `git commit -m "chore: bump version to x.y.z"`
+3. Push: `git push`
+4. Tag + release:
+   ```powershell
+   git tag vX.Y.Z main
+   git push origin vX.Y.Z
+   gh release create vX.Y.Z --title "vX.Y.Z — <summary>" --notes "<bullet points>"
+   ```
+
+**Versioning convention:**
+- `x.Y.0` — new features (new UI, new service, new sensor)
+- `x.y.Z` — bug fixes and format additions (new bank parser, UI fix)
+
+HACS checks the GitHub releases list for the latest tag. Without a release, HACS shows the old version even if commits were pushed.
+
+---
+
 ## Credit Conservation Notes
 
 - Batch file writes into single bash calls wherever possible.
