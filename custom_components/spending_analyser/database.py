@@ -171,6 +171,7 @@ class SpendingDatabase:
         account: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        search: str | None = None,
         limit: int = 500,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -188,6 +189,9 @@ class SpendingDatabase:
         if date_to:
             clauses.append("date <= ?")
             params.append(date_to)
+        if search:
+            clauses.append("description LIKE ?")
+            params.append(f"%{search}%")
 
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         params += [limit, offset]
@@ -196,6 +200,34 @@ class SpendingDatabase:
             params,
         ) as cur:
             return [dict(row) for row in await cur.fetchall()]
+
+    async def async_count_transactions(
+        self,
+        category: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        search: str | None = None,
+    ) -> int:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if category:
+            clauses.append("category = ?")
+            params.append(category)
+        if date_from:
+            clauses.append("date >= ?")
+            params.append(date_from)
+        if date_to:
+            clauses.append("date <= ?")
+            params.append(date_to)
+        if search:
+            clauses.append("description LIKE ?")
+            params.append(f"%{search}%")
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        async with self._db.execute(
+            f"SELECT COUNT(*) AS n FROM transactions {where}", params
+        ) as cur:
+            row = await cur.fetchone()
+            return int(row["n"]) if row else 0
 
     async def async_get_transaction(self, tx_id: int) -> dict[str, Any] | None:
         async with self._db.execute(

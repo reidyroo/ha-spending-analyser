@@ -18,7 +18,13 @@ from .const import (
     SERVICE_ADD_TRANSACTION, SERVICE_GENERATE_REPORT, SERVICE_IMPORT_STATEMENT, SERVICE_RECATEGORISE,
 )
 from .database import SpendingDatabase
-from .http_views import SpendingUploadApiView
+from .http_views import (
+    SpendingUploadApiView,
+    SpendingTransactionsApiView,
+    SpendingCategoriesApiView,
+    SpendingRecategoriseApiView,
+    SpendingOllamaTestApiView,
+)
 from .ollama_client import OllamaClient
 from .parsers import parse_statement
 from .report_generator import ReportGenerator, REPORT_PROMPTS
@@ -113,11 +119,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 def _register_panel(hass: HomeAssistant) -> None:
-    """Register the upload UI as a sidebar panel and the API view (idempotent)."""
-    # HTTP view — safe to register multiple times; HA deduplicates by name
-    hass.http.register_view(SpendingUploadApiView())
+    """Register HTTP views and sidebar panels (idempotent)."""
+    for view in (
+        SpendingUploadApiView(),
+        SpendingTransactionsApiView(),
+        SpendingCategoriesApiView(),
+        SpendingRecategoriseApiView(),
+        SpendingOllamaTestApiView(),
+    ):
+        hass.http.register_view(view)
 
-    # Sidebar iframe panel — skip if already registered
     from homeassistant.components import frontend
     if not hass.data.get(f"{DOMAIN}_panel_registered"):
         frontend.async_register_built_in_panel(
@@ -127,6 +138,15 @@ def _register_panel(hass: HomeAssistant) -> None:
             sidebar_icon="mdi:file-upload-outline",
             frontend_url_path="spending-upload",
             config={"url": "/local/spending_analyser/upload.html"},
+            require_admin=False,
+        )
+        frontend.async_register_built_in_panel(
+            hass,
+            component_name="iframe",
+            sidebar_title="Review Transactions",
+            sidebar_icon="mdi:table-check",
+            frontend_url_path="spending-review",
+            config={"url": "/local/spending_analyser/review.html"},
             require_admin=False,
         )
         hass.data[f"{DOMAIN}_panel_registered"] = True

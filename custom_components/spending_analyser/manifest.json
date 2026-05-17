@@ -1,7 +1,7 @@
 {
   "domain": "spending_analyser",
   "name": "HA Spending Analyser",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "documentation": "https://github.com/reidyroo/ha-spending-analyser",
   "issue_tracker": "https://github.com/reidyroo/ha-spending-analyser/issues",
   "dependencies": [],

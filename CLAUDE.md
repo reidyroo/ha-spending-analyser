@@ -63,16 +63,18 @@ Bank statement → Upload panel (Task 11) → Parser (Task 4) → SQLite DB (Tas
 
 ## Task Status
 
+### v0.1.0 (complete)
+
 | # | Task | Status |
 |---|------|--------|
 | 1 | GitHub repo + project structure | ✅ Done |
-| 2 | HA custom component skeleton | ✅ Done (combined with Task 1) |
+| 2 | HA custom component skeleton | ✅ Done |
 | 3 | SQLite transaction database | ✅ Done |
 | 4 | Statement import service (CSV/OFX/QIF) | ✅ Done |
-| 5 | Manual transaction entry service | ✅ Done (folded into Task 4 services) |
-| 6 | Ollama on Surface + Neural Engine verification | ✅ Done (user confirmed installed) |
+| 5 | Manual transaction entry service | ✅ Done |
+| 6 | Ollama on Surface + Neural Engine verification | ✅ Done (user confirmed) |
 | 7 | Ollama client integration | ✅ Done |
-| 8 | Auto-categorisation pipeline with learning | ✅ Done (folded into Tasks 7 + import service) |
+| 8 | Auto-categorisation pipeline with learning | ✅ Done |
 | 9 | HA sensor entities for spending metrics | ✅ Done |
 | 10 | Lovelace spending dashboard | ✅ Done |
 | 11 | Secure file upload panel | ✅ Done |
@@ -80,6 +82,28 @@ Bank statement → Upload panel (Task 11) → Parser (Task 4) → SQLite DB (Tas
 | 13 | Security hardening | ✅ Done |
 | 14 | Tests + GitHub Actions CI | ✅ Done |
 | 15 | HACS packaging + docs | ✅ Done |
+
+### v0.2.0 (complete)
+
+| # | Task | Status |
+|---|------|--------|
+| 16 | Transfer/reconciliation exclusion from spending sensors | ✅ Done — "Transfer" & "Income" excluded from MonthlySpending and MonthlyNet; credit card payments categorised as Transfer are not double-counted |
+| 17 | Transaction review & categorisation UI (`review.html`) | ✅ Done — table view, inline category dropdowns, AI suggest per row, bulk suggest, save, pagination, search/filter |
+| 18 | Ollama test panel (connectivity + prompt test) | ✅ Done — embedded in review page; tests connection and live categorisation with latency display |
+| 19 | HTTP API endpoints for UI | ✅ Done — `/api/spending_analyser/transactions`, `/categories`, `/recategorise`, `/ollama_test` |
+| 20 | Dashboard YAML fixes | ✅ Done — `type: stat` → `type: entity`; Import button navigates to upload panel |
+| 21 | Long-lived token setup UI | ✅ Done — both upload and review pages guide the user through one-time token creation |
+
+### v0.3.0 (backlog — ideas for next session)
+
+| # | Task | Notes |
+|---|------|-------|
+| 22 | Transfer auto-detection on import | Pattern match "CREDIT CARD PAYMENT", "BARCLAYCARD", "JOHN LEWIS FINANCIAL" etc. and pre-categorise as Transfer |
+| 23 | Review page: "Apply AI to all + save" one-click workflow | Bulk suggest + confirm all in a single action |
+| 24 | Review page: sort by column | Click date/amount/category headers to sort |
+| 25 | Month picker for dashboard + review | Filter data to a specific past month |
+| 26 | Budget alerts | HA notifications when spending in a category exceeds monthly budget |
+| 27 | CSV export of transactions | Download filtered view as CSV |
 
 ---
 

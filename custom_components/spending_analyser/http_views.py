@@ -19,6 +19,14 @@ if TYPE_CHECKING:
     from .database import SpendingDatabase
     from .ollama_client import OllamaClient
 
+
+def _get_entry_data(hass: HomeAssistant) -> dict | None:
+    domain_data = hass.data.get(DOMAIN, {})
+    return next(
+        (v for v in domain_data.values() if isinstance(v, dict) and "db" in v),
+        None,
+    )
+
 _LOGGER = logging.getLogger(__name__)
 
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024          # 10 MB
@@ -165,3 +173,167 @@ class SpendingUploadApiView(HomeAssistantView):
             {"added": added, "skipped": skipped, "file": filename, "source": "upload"},
         )
         return self.json({"added": added, "skipped": skipped, "filename": filename})
+
+
+# ---------------------------------------------------------------------------
+# Transaction list — GET /api/spending_analyser/transactions
+# ---------------------------------------------------------------------------
+
+class SpendingTransactionsApiView(HomeAssistantView):
+    """Paginated transaction list with optional filters."""
+
+    url = "/api/spending_analyser/transactions"
+    name = "api:spending_analyser:transactions"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app["hass"]
+        entry_data = _get_entry_data(hass)
+        if entry_data is None:
+            return self.json({"error": "Integration not loaded"}, status_code=503)
+        db: SpendingDatabase = entry_data["db"]
+
+        qs = request.rel_url.query
+        category  = qs.get("category") or None
+        date_from = qs.get("date_from") or None
+        date_to   = qs.get("date_to") or None
+        search    = qs.get("search") or None
+        try:
+            limit  = min(int(qs.get("limit", 100)), 500)
+            offset = max(int(qs.get("offset", 0)), 0)
+        except (ValueError, TypeError):
+            limit, offset = 100, 0
+
+        transactions = await db.async_get_transactions(
+            category=category, date_from=date_from, date_to=date_to,
+            search=search, limit=limit, offset=offset,
+        )
+        total = await db.async_count_transactions(
+            category=category, date_from=date_from, date_to=date_to, search=search,
+        )
+        return self.json({"transactions": transactions, "total": total})
+
+
+# ---------------------------------------------------------------------------
+# Categories — GET /api/spending_analyser/categories
+# ---------------------------------------------------------------------------
+
+class SpendingCategoriesApiView(HomeAssistantView):
+    url = "/api/spending_analyser/categories"
+    name = "api:spending_analyser:categories"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app["hass"]
+        entry_data = _get_entry_data(hass)
+        if entry_data is None:
+            return self.json({"error": "Integration not loaded"}, status_code=503)
+        db: SpendingDatabase = entry_data["db"]
+        categories = await db.async_get_categories()
+        return self.json({"categories": categories})
+
+
+# ---------------------------------------------------------------------------
+# HTTP recategorise — POST /api/spending_analyser/recategorise
+# ---------------------------------------------------------------------------
+
+class SpendingRecategoriseApiView(HomeAssistantView):
+    """Update a transaction's category and learn the rule."""
+
+    url = "/api/spending_analyser/recategorise"
+    name = "api:spending_analyser:recategorise_http"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app["hass"]
+        entry_data = _get_entry_data(hass)
+        if entry_data is None:
+            return self.json({"error": "Integration not loaded"}, status_code=503)
+        db: SpendingDatabase = entry_data["db"]
+
+        try:
+            body = await request.json()
+        except Exception:
+            return self.json({"error": "Invalid JSON body"}, status_code=400)
+
+        tx_id    = body.get("transaction_id")
+        category = str(body.get("category", "")).strip()
+        if not isinstance(tx_id, int) or not category:
+            return self.json(
+                {"error": "transaction_id (int) and category (string) required"},
+                status_code=400,
+            )
+        if len(category) > 60:
+            return self.json({"error": "category too long (max 60 chars)"}, status_code=400)
+
+        tx = await db.async_get_transaction(tx_id)
+        if not tx:
+            return self.json({"error": f"Transaction {tx_id} not found"}, status_code=404)
+
+        await db.async_update_transaction_category(tx_id, category, user_verified=True)
+        await db.async_upsert_category_rule(tx["description"], category)
+        _LOGGER.info("HTTP recategorise: tx %d → '%s'", tx_id, category)
+        return self.json({"success": True, "transaction_id": tx_id, "category": category})
+
+
+# ---------------------------------------------------------------------------
+# Ollama connectivity + categorisation test — POST /api/spending_analyser/ollama_test
+# ---------------------------------------------------------------------------
+
+class SpendingOllamaTestApiView(HomeAssistantView):
+    """Test Ollama connectivity and/or categorise a single description."""
+
+    url = "/api/spending_analyser/ollama_test"
+    name = "api:spending_analyser:ollama_test"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app["hass"]
+        entry_data = _get_entry_data(hass)
+        if entry_data is None:
+            return self.json({"error": "Integration not loaded"}, status_code=503)
+
+        db: SpendingDatabase  = entry_data["db"]
+        ollama = entry_data["ollama"]
+
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+        description = str(body.get("description") or "").strip()[:200]
+        start = time.monotonic()
+
+        if not description:
+            # Connection-only ping
+            connected = await ollama.async_test_connection()
+            latency_ms = int((time.monotonic() - start) * 1000)
+            models: list[str] = []
+            if connected:
+                try:
+                    models = await ollama.async_list_models()
+                except Exception:
+                    pass
+            return self.json({
+                "connected": connected,
+                "latency_ms": latency_ms,
+                "model": ollama._model,
+                "models_available": models,
+            })
+
+        # Full categorisation test
+        categories = await db.async_get_categories()
+        category_names = [c["name"] for c in categories]
+        learned_rules = await db.async_get_category_rules()
+
+        category, confidence = await ollama.async_categorise(
+            description, category_names, learned_rules
+        )
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return self.json({
+            "connected": True,
+            "category": category,
+            "confidence": round(confidence, 3),
+            "latency_ms": latency_ms,
+            "model": ollama._model,
+        })

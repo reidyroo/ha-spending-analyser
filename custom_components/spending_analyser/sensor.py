@@ -90,6 +90,9 @@ class _SpendingBaseSensor(SensorEntity):
 # Monthly spending (expenses only — negative amounts, reported as positive £)
 # ---------------------------------------------------------------------------
 
+_EXCLUDE_FROM_SPENDING = {"Transfer", "Income"}
+
+
 class MonthlySpendingSensor(_SpendingBaseSensor):
     _sensor_key = "monthly_spending"
     _attr_name = "Monthly Spending"
@@ -98,6 +101,8 @@ class MonthlySpendingSensor(_SpendingBaseSensor):
     async def async_update(self) -> None:
         date_from, date_to = self._current_month()
         rows = await self._db.async_get_spending_by_category(date_from, date_to)
+        # Exclude credit card payments and internal transfers — they are reconciliation, not new spend
+        rows = [r for r in rows if r["category"] not in _EXCLUDE_FROM_SPENDING]
 
         total = sum(abs(r["total"]) for r in rows)
         self._attr_native_value = round(total, 2)
@@ -146,7 +151,10 @@ class MonthlyNetSensor(_SpendingBaseSensor):
 
     async def async_update(self) -> None:
         today = date.today()
-        total = await self._db.async_get_monthly_total(today.year, today.month)
+        date_from, date_to = self._current_month()
+        rows = await self._db.async_get_transactions(date_from=date_from, date_to=date_to, limit=5000)
+        # Exclude Transfer so credit card payments don't double-count as expenditure
+        total = sum(r["amount"] for r in rows if r["category"] not in _EXCLUDE_FROM_SPENDING)
         self._attr_native_value = round(total, 2)
         self._attr_extra_state_attributes = {
             "year": today.year,

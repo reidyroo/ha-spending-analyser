@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Review Transactions — Spending Analyser</title>
+<style>
+  :root {
+    --ha-blue: #03a9f4;
+    --success: #4caf50;
+    --error:   #f44336;
+    --warn:    #ff9800;
+    --bg:      #f5f5f5;
+    --card:    #ffffff;
+    --border:  #e0e0e0;
+    --text:    #212121;
+    --muted:   #757575;
+    --radius:  10px;
+    --row-hover: rgba(3,169,244,.05);
+    --modified: rgba(255,152,0,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #0f172a;
+      --card:      #1e293b;
+      --border:    #334155;
+      --text:      #f1f5f9;
+      --muted:     #94a3b8;
+      --row-hover: rgba(3,169,244,.08);
+      --modified:  rgba(255,152,0,.15);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    padding: 16px;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .header h1 { font-size: 1.15rem; font-weight: 700; }
+  .token-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+  .dot.bad { background: var(--error); }
+  .link { color: var(--ha-blue); cursor: pointer; text-decoration: underline; }
+
+  /* ── Token setup overlay ── */
+  .token-overlay {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 14px;
+  }
+  .token-overlay.hidden { display: none; }
+  .token-overlay h2 { font-size: 0.95rem; color: var(--warn); margin-bottom: 8px; }
+  .token-overlay ol { padding-left: 18px; line-height: 1.8; margin-bottom: 12px; }
+  .token-overlay ol a { color: var(--ha-blue); }
+  .token-row { display: flex; gap: 8px; }
+  .token-row input {
+    flex: 1; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--text);
+    font-family: monospace; font-size: 0.82rem;
+  }
+  .btn-sm {
+    padding: 8px 14px; background: var(--ha-blue); color: #fff;
+    border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.82rem;
+  }
+  .btn-sm:hover { opacity: .88; }
+  .btn-sm:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-sm.secondary { background: var(--border); color: var(--text); }
+  .btn-sm.danger { background: var(--error); }
+  .btn-sm.success-btn { background: var(--success); }
+
+  /* ── Ollama panel ── */
+  .ollama-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 12px;
+  }
+  .ollama-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .ollama-summary span { flex: 1; font-size: 0.85rem; }
+  .ollama-summary .chevron { font-size: 0.7rem; color: var(--muted); transition: transform .2s; }
+  .ollama-summary.open .chevron { transform: rotate(180deg); }
+  .ollama-detail { margin-top: 12px; display: none; }
+  .ollama-detail.open { display: block; }
+  .test-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .test-row input {
+    flex: 1; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--text); font-size: 0.85rem;
+  }
+  .test-result {
+    padding: 10px 12px; border-radius: 6px; font-size: 0.83rem;
+    background: rgba(3,169,244,.08); border: 1px solid rgba(3,169,244,.25);
+  }
+  .test-result.hidden { display: none; }
+  .conf-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 10px;
+    font-size: 0.75rem; font-weight: 700; margin-left: 6px;
+    background: rgba(76,175,80,.2); color: var(--success);
+  }
+  .conf-badge.low { background: rgba(255,152,0,.2); color: var(--warn); }
+
+  /* ── Filters ── */
+  .filters {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .filters select, .filters input[type="text"], .filters input[type="date"] {
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); font-size: 0.83rem;
+  }
+  .filters input[type="text"] { min-width: 160px; }
+  .filter-label { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+  .filter-sep { width: 1px; height: 20px; background: var(--border); }
+
+  /* ── Actions bar ── */
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .actions .count { font-size: 0.82rem; color: var(--muted); flex: 1; }
+  .pending-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; border-radius: 9px;
+    background: var(--warn); color: #fff; font-size: 0.7rem; font-weight: 700;
+    margin-left: 4px; padding: 0 4px;
+  }
+
+  /* ── Table ── */
+  .table-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: auto;
+    margin-bottom: 12px;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    padding: 9px 12px; text-align: left; font-size: 0.75rem;
+    font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--card); z-index: 1;
+    white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--row-hover); }
+  tbody tr.modified { background: var(--modified); }
+  tbody td { padding: 8px 12px; vertical-align: middle; }
+  .td-date { white-space: nowrap; color: var(--muted); font-size: 0.82rem; width: 90px; }
+  .td-desc { max-width: 220px; }
+  .td-desc .desc-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; font-size: 0.85rem; }
+  .td-desc .desc-account { font-size: 0.72rem; color: var(--muted); }
+  .td-amount { text-align: right; white-space: nowrap; font-weight: 600; font-size: 0.88rem; width: 90px; }
+  .td-amount.expense { color: var(--error); }
+  .td-amount.income  { color: var(--success); }
+  .td-cat { width: 180px; }
+  .td-ai  { width: 200px; }
+
+  /* Category select */
+  .cat-select {
+    width: 100%; padding: 5px 8px; border: 1px solid var(--border);
+    border-radius: 5px; background: var(--bg); color: var(--text);
+    font-size: 0.82rem; cursor: pointer;
+  }
+  .cat-select.modified { border-color: var(--warn); background: rgba(255,152,0,.06); }
+
+  /* AI suggestion */
+  .suggest-btn {
+    padding: 3px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: transparent; color: var(--ha-blue); font-size: 0.78rem;
+    cursor: pointer; white-space: nowrap;
+  }
+  .suggest-btn:hover { background: rgba(3,169,244,.08); }
+  .suggest-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .ai-result {
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    font-size: 0.8rem;
+  }
+  .ai-cat { font-weight: 600; }
+  .apply-link {
+    color: var(--ha-blue); cursor: pointer; font-size: 0.75rem;
+    text-decoration: underline; white-space: nowrap;
+  }
+  .loading-spin {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid var(--border); border-top-color: var(--ha-blue);
+    border-radius: 50%; animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty-row td { text-align: center; padding: 32px; color: var(--muted); font-size: 0.9rem; }
+
+  /* ── Pagination ── */
+  .pagination {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    font-size: 0.82rem; color: var(--muted);
+  }
+  .pagination button {
+    padding: 5px 12px; border: 1px solid var(--border); border-radius: 5px;
+    background: var(--card); color: var(--text); cursor: pointer; font-size: 0.82rem;
+  }
+  .pagination button:disabled { opacity: .4; cursor: not-allowed; }
+  .pagination button:not(:disabled):hover { border-color: var(--ha-blue); color: var(--ha-blue); }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: #323232; color: #fff; padding: 10px 20px; border-radius: 20px;
+    font-size: 0.85rem; transition: transform .3s; z-index: 999; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- Token setup -->
+<div class="token-overlay hidden" id="token-overlay">
+  <h2>🔑 Access token required</h2>
+  <ol>
+    <li>Open <a href="/profile/security" target="_top">Profile → Security</a></li>
+    <li>Create a <strong>Long-lived access token</strong> named <em>Spending Analyser</em></li>
+    <li>Paste it below</li>
+  </ol>
+  <div class="token-row">
+    <input type="password" id="token-input" placeholder="Paste token…" autocomplete="off">
+    <button class="btn-sm" id="token-save">Save</button>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <h1>Transaction Review &amp; Categorisation</h1>
+  <div class="token-bar hidden" id="token-bar">
+    <span class="dot" id="token-dot"></span>
+    <span id="token-msg">Token saved</span>
+    <span class="link" id="token-change">Change</span>
+  </div>
+</div>
+
+<!-- Ollama status + test -->
+<div class="ollama-panel">
+  <div class="ollama-summary" id="ollama-summary">
+    <span class="dot bad" id="ollama-dot"></span>
+    <span id="ollama-status">Checking Ollama…</span>
+    <span class="chevron">▼</span>
+  </div>
+  <div class="ollama-detail" id="ollama-detail">
+    <div class="test-row" style="margin-top:10px">
+      <input type="text" id="test-desc" placeholder="Enter a merchant name to test categorisation…">
+      <button class="btn-sm" id="test-btn">Test</button>
+    </div>
+    <div class="test-result hidden" id="test-result"></div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="filters">
+  <span class="filter-label">Category:</span>
+  <select id="filter-cat">
+    <option value="">All</option>
+    <option value="Uncategorised" selected>Uncategorised</option>
+  </select>
+  <div class="filter-sep"></div>
+  <span class="filter-label">Search:</span>
+  <input type="text" id="filter-search" placeholder="Description…">
+  <div class="filter-sep"></div>
+  <span class="filter-label">From:</span>
+  <input type="date" id="filter-from">
+  <span class="filter-label">To:</span>
+  <input type="date" id="filter-to">
+  <button class="btn-sm secondary" id="filter-apply">Apply</button>
+  <button class="btn-sm secondary" id="filter-clear">Clear</button>
+</div>
+
+<!-- Actions -->
+<div class="actions">
+  <span class="count" id="count-label">Loading…</span>
+  <button class="btn-sm secondary" id="suggest-all-btn">✨ Suggest AI for all visible</button>
+  <button class="btn-sm success-btn" id="save-btn" disabled>
+    Save changes <span class="pending-badge hidden" id="pending-count">0</span>
+  </button>
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Description</th>
+        <th style="text-align:right">Amount</th>
+        <th>Category</th>
+        <th>AI Suggestion</th>
+      </tr>
+    </thead>
+    <tbody id="tx-body">
+      <tr class="empty-row"><td colspan="5">Loading transactions…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination">
+  <button id="prev-btn" disabled>← Prev</button>
+  <span id="page-label">—</span>
+  <button id="next-btn" disabled>Next →</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const STORAGE_KEY  = 'spending_analyser_token';
+  const PAGE_SIZE    = 75;
+
+  // State
+  let currentOffset  = 0;
+  let totalCount     = 0;
+  let allCategories  = [];
+  let pendingChanges = {};   // {tx_id: newCategory}
+  let aiSuggestions  = {};   // {tx_id: {category, confidence}}
+  let currentRows    = [];   // transaction objects on current page
+
+  /* ── Token ── */
+  const getToken   = () => localStorage.getItem(STORAGE_KEY) || '';
+  const saveToken  = t  => localStorage.setItem(STORAGE_KEY, t.trim());
+  const clearToken = () => localStorage.removeItem(STORAGE_KEY);
+
+  function refreshTokenUI() {
+    const tok = getToken();
+    const overlay = document.getElementById('token-overlay');
+    const bar     = document.getElementById('token-bar');
+    if (tok) {
+      overlay.classList.add('hidden');
+      bar.classList.remove('hidden');
+      document.getElementById('token-dot').className = 'dot';
+      document.getElementById('token-msg').textContent = 'Token saved';
+    } else {
+      overlay.classList.remove('hidden');
+      bar.classList.add('hidden');
+    }
+  }
+
+  document.getElementById('token-save').addEventListener('click', () => {
+    const val = document.getElementById('token-input').value.trim();
+    if (!val) return;
+    saveToken(val);
+    document.getElementById('token-input').value = '';
+    refreshTokenUI();
+    init();
+  });
+  document.getElementById('token-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('token-save').click();
+  });
+  document.getElementById('token-change').addEventListener('click', () => {
+    clearToken();
+    refreshTokenUI();
+  });
+
+  /* ── API helper ── */
+  async function api(path, options = {}) {
+    const tok = getToken();
+    const resp = await fetch(path, {
+      ...options,
+      headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json', ...options.headers },
+    });
+    if (resp.status === 401) {
+      clearToken();
+      refreshTokenUI();
+      throw new Error('Token rejected — please save a new one');
+    }
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    return resp.json();
+  }
+
+  /* ── Ollama panel ── */
+  document.getElementById('ollama-summary').addEventListener('click', () => {
+    const summary = document.getElementById('ollama-summary');
+    const detail  = document.getElementById('ollama-detail');
+    summary.classList.toggle('open');
+    detail.classList.toggle('open');
+  });
+
+  async function checkOllama() {
+    const dot    = document.getElementById('ollama-dot');
+    const status = document.getElementById('ollama-status');
+    status.textContent = 'Checking Ollama…';
+    try {
+      const res = await api('/api/spending_analyser/ollama_test', { method: 'POST', body: JSON.stringify({}) });
+      if (res.connected) {
+        dot.className = 'dot';
+        const modelList = res.models_available?.length ? ` — models: ${res.models_available.join(', ')}` : '';
+        status.textContent = `Ollama connected (${res.model}${modelList}) · ${res.latency_ms}ms`;
+      } else {
+        dot.className = 'dot bad';
+        status.textContent = 'Ollama not reachable — check Surface is on and Ollama is running';
+      }
+    } catch (e) {
+      dot.className = 'dot bad';
+      status.textContent = `Ollama error: ${e.message}`;
+    }
+  }
+
+  document.getElementById('test-btn').addEventListener('click', async () => {
+    const desc    = document.getElementById('test-desc').value.trim();
+    const result  = document.getElementById('test-result');
+    const btn     = document.getElementById('test-btn');
+    if (!desc) return;
+    btn.disabled = true;
+    result.className = 'test-result';
+    result.innerHTML = '<span class="loading-spin"></span> Asking Ollama…';
+    try {
+      const res = await api('/api/spending_analyser/ollama_test', {
+        method: 'POST', body: JSON.stringify({ description: desc }),
+      });
+      const pct  = Math.round(res.confidence * 100);
+      const cls  = pct >= 70 ? '' : 'low';
+      result.innerHTML =
+        `Category: <strong>${esc(res.category)}</strong>` +
+        `<span class="conf-badge ${cls}">${pct}%</span>` +
+        ` &nbsp;·&nbsp; ${res.latency_ms}ms &nbsp;·&nbsp; model: ${esc(res.model)}`;
+    } catch (e) {
+      result.innerHTML = `<span style="color:var(--error)">Error: ${esc(e.message)}</span>`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  document.getElementById('test-desc').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('test-btn').click();
+  });
+
+  /* ── Categories ── */
+  async function loadCategories() {
+    const data = await api('/api/spending_analyser/categories');
+    allCategories = data.categories.map(c => c.name);
+    const sel = document.getElementById('filter-cat');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">All</option>';
+    for (const name of allCategories) {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = name;
+      if (name === current) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    // Ensure Uncategorised is selected by default if present
+    if (!current && allCategories.includes('Uncategorised')) sel.value = 'Uncategorised';
+  }
+
+  /* ── Load transactions ── */
+  function buildFilterParams(offset) {
+    const params = new URLSearchParams();
+    const cat    = document.getElementById('filter-cat').value;
+    const search = document.getElementById('filter-search').value.trim();
+    const from   = document.getElementById('filter-from').value;
+    const to     = document.getElementById('filter-to').value;
+    if (cat)    params.set('category',  cat);
+    if (search) params.set('search',    search);
+    if (from)   params.set('date_from', from);
+    if (to)     params.set('date_to',   to);
+    params.set('limit',  PAGE_SIZE);
+    params.set('offset', offset ?? currentOffset);
+    return params;
+  }
+
+  async function loadTransactions(offset = 0) {
+    currentOffset = offset;
+    document.getElementById('count-label').textContent = 'Loading…';
+    const params = buildFilterParams(offset);
+    const data = await api(`/api/spending_analyser/transactions?${params}`);
+    totalCount  = data.total;
+    currentRows = data.transactions;
+    renderTable();
+    updatePagination();
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('tx-body');
+    tbody.innerHTML = '';
+
+    if (currentRows.length === 0) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No transactions match these filters.</td></tr>';
+      document.getElementById('count-label').textContent = '0 transactions';
+      return;
+    }
+
+    const end = Math.min(currentOffset + PAGE_SIZE, totalCount);
+    document.getElementById('count-label').textContent =
+      `Showing ${currentOffset + 1}–${end} of ${totalCount} transaction${totalCount !== 1 ? 's' : ''}`;
+
+    for (const tx of currentRows) {
+      tbody.appendChild(buildRow(tx));
+    }
+    updateSaveButton();
+  }
+
+  function buildRow(tx) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = tx.id;
+    if (pendingChanges[tx.id]) tr.classList.add('modified');
+
+    // Date
+    const tdDate = document.createElement('td');
+    tdDate.className = 'td-date';
+    tdDate.textContent = tx.date;
+    tr.appendChild(tdDate);
+
+    // Description
+    const tdDesc = document.createElement('td');
+    tdDesc.className = 'td-desc';
+    const descSpan = document.createElement('span');
+    descSpan.className = 'desc-text';
+    descSpan.textContent = tx.description;
+    descSpan.title = tx.description;
+    tdDesc.appendChild(descSpan);
+    if (tx.account) {
+      const acct = document.createElement('span');
+      acct.className = 'desc-account';
+      acct.textContent = tx.account;
+      tdDesc.appendChild(acct);
+    }
+    tr.appendChild(tdDesc);
+
+    // Amount
+    const tdAmt = document.createElement('td');
+    tdAmt.className = 'td-amount ' + (tx.amount < 0 ? 'expense' : 'income');
+    const sign = tx.amount < 0 ? '−' : '+';
+    tdAmt.textContent = sign + '£' + Math.abs(tx.amount).toFixed(2);
+    tr.appendChild(tdAmt);
+
+    // Category select
+    const tdCat = document.createElement('td');
+    tdCat.className = 'td-cat';
+    const sel = buildCatSelect(tx);
+    tdCat.appendChild(sel);
+    tr.appendChild(tdCat);
+
+    // AI suggestion
+    const tdAi = document.createElement('td');
+    tdAi.className = 'td-ai';
+    tdAi.appendChild(buildAiCell(tx));
+    tr.appendChild(tdAi);
+
+    return tr;
+  }
+
+  function buildCatSelect(tx) {
+    const sel = document.createElement('select');
+    sel.className = 'cat-select' + (pendingChanges[tx.id] ? ' modified' : '');
+    for (const name of allCategories) {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = name;
+      if (name === (pendingChanges[tx.id] ?? tx.category)) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener('change', () => {
+      const row = sel.closest('tr');
+      if (sel.value !== tx.category) {
+        pendingChanges[tx.id] = sel.value;
+        sel.classList.add('modified');
+        row.classList.add('modified');
+      } else {
+        delete pendingChanges[tx.id];
+        sel.classList.remove('modified');
+        row.classList.remove('modified');
+      }
+      updateSaveButton();
+    });
+    return sel;
+  }
+
+  function buildAiCell(tx) {
+    const wrap = document.createElement('div');
+    const sug  = aiSuggestions[tx.id];
+
+    if (!sug) {
+      const btn = document.createElement('button');
+      btn.className = 'suggest-btn';
+      btn.textContent = '✨ Suggest';
+      btn.addEventListener('click', () => suggestOne(tx.id, tx.description, wrap, tx));
+      wrap.appendChild(btn);
+    } else {
+      renderAiSuggestion(wrap, tx, sug);
+    }
+    return wrap;
+  }
+
+  function renderAiSuggestion(wrap, tx, sug) {
+    wrap.innerHTML = '';
+    const pct = Math.round(sug.confidence * 100);
+    const cls = pct >= 70 ? '' : 'low';
+
+    const div = document.createElement('div');
+    div.className = 'ai-result';
+
+    const catSpan = document.createElement('span');
+    catSpan.className = 'ai-cat';
+    catSpan.textContent = sug.category;
+
+    const badge = document.createElement('span');
+    badge.className = `conf-badge ${cls}`;
+    badge.textContent = `${pct}%`;
+
+    div.appendChild(catSpan);
+    div.appendChild(badge);
+
+    if (sug.category !== tx.category) {
+      const apply = document.createElement('span');
+      apply.className = 'apply-link';
+      apply.textContent = 'Apply';
+      apply.addEventListener('click', () => {
+        const row = document.querySelector(`tr[data-id="${tx.id}"]`);
+        const sel = row?.querySelector('.cat-select');
+        if (sel) {
+          sel.value = sug.category;
+          sel.dispatchEvent(new Event('change'));
+        }
+      });
+      div.appendChild(apply);
+    }
+
+    wrap.appendChild(div);
+  }
+
+  /* ── AI suggest ── */
+  async function suggestOne(txId, description, wrapEl, tx) {
+    wrapEl.innerHTML = '<span class="loading-spin"></span>';
+    try {
+      const res = await api('/api/spending_analyser/ollama_test', {
+        method: 'POST', body: JSON.stringify({ description }),
+      });
+      aiSuggestions[txId] = { category: res.category, confidence: res.confidence };
+      renderAiSuggestion(wrapEl, tx, aiSuggestions[txId]);
+    } catch (e) {
+      wrapEl.innerHTML = `<span style="color:var(--error);font-size:.75rem">${esc(e.message)}</span>`;
+    }
+  }
+
+  document.getElementById('suggest-all-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('suggest-all-btn');
+    btn.disabled = true;
+    const uncategorised = currentRows.filter(tx => !aiSuggestions[tx.id]);
+    btn.textContent = `Suggesting 0/${uncategorised.length}…`;
+    let done = 0;
+    for (const tx of uncategorised) {
+      const row  = document.querySelector(`tr[data-id="${tx.id}"]`);
+      const cell = row?.querySelector('.td-ai');
+      if (cell) {
+        cell.innerHTML = '<span class="loading-spin"></span>';
+        await suggestOne(tx.id, tx.description, cell, tx);
+      }
+      done++;
+      btn.textContent = `Suggesting ${done}/${uncategorised.length}…`;
+    }
+    btn.disabled = false;
+    btn.textContent = '✨ Suggest AI for all visible';
+  });
+
+  /* ── Save changes ── */
+  function updateSaveButton() {
+    const count = Object.keys(pendingChanges).length;
+    const btn   = document.getElementById('save-btn');
+    const badge = document.getElementById('pending-count');
+    btn.disabled = count === 0;
+    if (count > 0) {
+      badge.textContent = count;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+
+  document.getElementById('save-btn').addEventListener('click', async () => {
+    const entries = Object.entries(pendingChanges);
+    if (entries.length === 0) return;
+    const btn = document.getElementById('save-btn');
+    btn.disabled = true;
+    btn.textContent = `Saving…`;
+    let saved = 0, failed = 0;
+    for (const [txId, category] of entries) {
+      try {
+        await api('/api/spending_analyser/recategorise', {
+          method: 'POST', body: JSON.stringify({ transaction_id: parseInt(txId), category }),
+        });
+        delete pendingChanges[txId];
+        saved++;
+      } catch (e) {
+        failed++;
+        _LOGGER?.warning(`Failed to save tx ${txId}: ${e.message}`);
+      }
+    }
+    btn.textContent = 'Save changes';
+    updateSaveButton();
+    if (failed === 0) {
+      toast(`✓ ${saved} transaction${saved !== 1 ? 's' : ''} saved`);
+    } else {
+      toast(`Saved ${saved}, ${failed} failed`);
+    }
+    await loadTransactions(currentOffset);
+  });
+
+  /* ── Filters ── */
+  document.getElementById('filter-apply').addEventListener('click', () => loadTransactions(0));
+  document.getElementById('filter-search').addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadTransactions(0);
+  });
+  document.getElementById('filter-clear').addEventListener('click', () => {
+    document.getElementById('filter-cat').value = '';
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-from').value = '';
+    document.getElementById('filter-to').value = '';
+    pendingChanges = {};
+    aiSuggestions = {};
+    loadTransactions(0);
+  });
+
+  /* ── Pagination ── */
+  function updatePagination() {
+    const prev = document.getElementById('prev-btn');
+    const next = document.getElementById('next-btn');
+    const lbl  = document.getElementById('page-label');
+    const pages = Math.ceil(totalCount / PAGE_SIZE) || 1;
+    const page  = Math.floor(currentOffset / PAGE_SIZE) + 1;
+    lbl.textContent = `Page ${page} of ${pages}`;
+    prev.disabled = currentOffset === 0;
+    next.disabled = currentOffset + PAGE_SIZE >= totalCount;
+  }
+
+  document.getElementById('prev-btn').addEventListener('click', () => {
+    if (currentOffset > 0) loadTransactions(Math.max(0, currentOffset - PAGE_SIZE));
+  });
+  document.getElementById('next-btn').addEventListener('click', () => {
+    if (currentOffset + PAGE_SIZE < totalCount) loadTransactions(currentOffset + PAGE_SIZE);
+  });
+
+  /* ── Toast ── */
+  let toastTimer = null;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  /* ── Utilities ── */
+  function esc(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── Init ── */
+  async function init() {
+    if (!getToken()) return;
+    try {
+      await loadCategories();
+      await loadTransactions(0);
+      checkOllama();
+    } catch (e) {
+      toast(`Error: ${e.message}`);
+    }
+  }
+
+  refreshTokenUI();
+  if (getToken()) init();
+</script>
+</body>
+</html>

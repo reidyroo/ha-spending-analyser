@@ -1,7 +1,7 @@
 """Constants for the HA Spending Analyser integration."""
 
 DOMAIN = "spending_analyser"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 # Config entry keys
 CONF_OLLAMA_HOST = "ollama_host"
