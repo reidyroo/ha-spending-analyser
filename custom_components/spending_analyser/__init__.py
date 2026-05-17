@@ -22,6 +22,7 @@ from .http_views import SpendingUploadApiView
 from .ollama_client import OllamaClient
 from .parsers import parse_statement
 from .report_generator import ReportGenerator, REPORT_PROMPTS
+from .security import sanitize_prompt_input, validate_statement_content
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -137,6 +138,20 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def handle_import(call: ServiceCall) -> None:
         file_path: str = call.data["file_path"]
+        # Contain the path to HA config dir to prevent reading arbitrary host files
+        config_dir = hass.config.config_dir
+        try:
+            import os as _os
+            resolved = _os.path.realpath(_os.path.abspath(file_path))
+            if not resolved.startswith(_os.path.realpath(config_dir)):
+                raise ServiceValidationError(
+                    f"File path must be within the HA config directory ({config_dir})"
+                )
+        except ServiceValidationError:
+            raise
+        except Exception as exc:
+            raise ServiceValidationError(f"Invalid file path: {exc}") from exc
+
         if not os.path.isfile(file_path):
             raise ServiceValidationError(f"File not found: {file_path}")
 
@@ -150,6 +165,11 @@ def _register_services(hass: HomeAssistant) -> None:
 
         with open(file_path, "rb") as fh:
             content = fh.read()
+
+        try:
+            validate_statement_content(content, file_path)
+        except ValueError as exc:
+            raise ServiceValidationError(str(exc)) from exc
 
         transactions = await hass.async_add_executor_job(
             parse_statement, content, file_path, column_map or None
@@ -199,10 +219,10 @@ def _register_services(hass: HomeAssistant) -> None:
         db: SpendingDatabase = entry_data["db"]
         tx_id, is_dup = await db.async_add_transaction(
             date=call.data["date"],
-            description=call.data["description"],
+            description=sanitize_prompt_input(call.data["description"], max_len=200),
             amount=call.data["amount"],
-            category=call.data.get("category", "Uncategorised"),
-            account=call.data.get("account"),
+            category=sanitize_prompt_input(call.data.get("category", "Uncategorised"), max_len=60),
+            account=call.data.get("account", "")[:30] or None,
         )
         if is_dup:
             _LOGGER.info("Transaction already exists (id=%d), skipped", tx_id)

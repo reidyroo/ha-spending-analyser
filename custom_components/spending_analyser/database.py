@@ -131,6 +131,11 @@ class SpendingDatabase:
         ai_confidence: float | None = None,
         raw_data: dict | None = None,
     ) -> tuple[int, bool]:
+        # Hard caps — prevent unbounded data reaching the DB
+        description = description[:255]
+        category    = category[:60]
+        if account:
+            account = account[:30]
         """Insert a transaction. Returns (row_id, is_duplicate)."""
         import_hash = _make_hash(date, description, amount)
         try:

@@ -13,6 +13,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import DEFAULT_CATEGORIES, DOMAIN
 from .parsers import parse_statement
+from .security import RateLimiter, validate_statement_content
 
 if TYPE_CHECKING:
     from .database import SpendingDatabase
@@ -40,6 +41,12 @@ class SpendingUploadApiView(HomeAssistantView):
 
     async def post(self, request: web.Request) -> web.Response:
         hass: HomeAssistant = request.app["hass"]
+
+        # ── Rate limiting: 10 uploads per IP per 10 minutes ────────
+        limiter = RateLimiter.get(hass.data, "upload", max_calls=10, window_seconds=600)
+        remote_ip = request.remote or "unknown"
+        if not limiter.allow(remote_ip):
+            return self.json({"error": "Too many requests — try again later"}, status_code=429)
 
         # ── Retrieve DB / Ollama from domain data ──────────────────
         domain_data = hass.data.get(DOMAIN, {})
@@ -87,6 +94,12 @@ class SpendingUploadApiView(HomeAssistantView):
                 {"error": f"Unsupported format '{ext}'. Allowed: csv, ofx, qfx, qif"},
                 status_code=415,
             )
+
+        # ── Magic-byte / content validation ────────────────────────
+        try:
+            validate_statement_content(file_content, filename)
+        except ValueError as exc:
+            return self.json({"error": str(exc)}, status_code=415)
 
         # ── Save to uploads dir (kept for audit trail) ─────────────
         uploads_dir = hass.config.path("spending_analyser", "uploads")

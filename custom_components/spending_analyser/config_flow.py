@@ -15,6 +15,7 @@ from .const import (
     DEFAULT_OLLAMA_PORT,
     DOMAIN,
 )
+from .security import validate_ollama_host, validate_port, validate_model_name
 
 DATA_SCHEMA = vol.Schema(
     {
@@ -45,16 +46,34 @@ class SpendingAnalyserConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            reachable = await _test_ollama_connection(
-                user_input[CONF_OLLAMA_HOST], user_input[CONF_OLLAMA_PORT]
-            )
+            # ── Validate inputs before hitting the network ─────────
+            try:
+                host  = validate_ollama_host(user_input[CONF_OLLAMA_HOST])
+                port  = validate_port(user_input[CONF_OLLAMA_PORT])
+                model = validate_model_name(user_input[CONF_OLLAMA_MODEL])
+            except ValueError as exc:
+                errors["base"] = "invalid_input"
+                # Surface the specific message in the description_placeholders
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=DATA_SCHEMA,
+                    errors=errors,
+                    description_placeholders={"error_detail": str(exc)},
+                )
+
+            reachable = await _test_ollama_connection(host, port)
             if not reachable:
                 errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(DOMAIN)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title="Spending Analyser", data=user_input
+                    title="Spending Analyser",
+                    data={
+                        CONF_OLLAMA_HOST:  host,
+                        CONF_OLLAMA_PORT:  port,
+                        CONF_OLLAMA_MODEL: model,
+                    },
                 )
 
         return self.async_show_form(

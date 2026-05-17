@@ -6,6 +6,8 @@ import os
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
 
+from .security import sanitize_prompt_input
+
 if TYPE_CHECKING:
     from .database import SpendingDatabase
     from .ollama_client import OllamaClient
@@ -319,6 +321,8 @@ class ReportGenerator:
         if prompt_key == "category_spotlight":
             if not category:
                 raise ValueError("'category' is required for the category_spotlight prompt")
+            # Sanitise before injecting into the AI prompt
+            category = sanitize_prompt_input(category, max_len=60)
             date_from, date_to = _iso_month(year, month)
             context = await _category_context(
                 self._db, date_from, date_to, self._currency, month_label, category
