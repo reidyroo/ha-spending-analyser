@@ -35,17 +35,17 @@ views:
       # ── Quick stats row ───────────────────────────────────────────
       - type: horizontal-stack
         cards:
-          - type: stat
+          - type: entity
             entity: sensor.spending_analyser_monthly_spending
             name: This Month
             icon: mdi:cash-minus
 
-          - type: stat
+          - type: entity
             entity: sensor.spending_analyser_monthly_income
             name: Income
             icon: mdi:cash-plus
 
-          - type: stat
+          - type: entity
             entity: sensor.spending_analyser_monthly_net
             name: Net
             icon: mdi:bank-transfer
@@ -75,8 +75,5 @@ views:
         name: Import Statement
         icon: mdi:file-upload-outline
         tap_action:
-          action: call-service
-          service: spending_analyser.import_statement
-          data:
-            file_path: /config/statements/latest.csv
-            categorise: true
+          action: navigate
+          navigation_path: /spending-upload
