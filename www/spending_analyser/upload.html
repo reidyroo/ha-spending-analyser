@@ -321,15 +321,41 @@
   }
   function hideResult() { resultEl.style.display = 'none'; }
 
-  /* ── HA token from localStorage ── */
+  /* ── HA token — multiple fallback strategies ── */
   function getToken() {
+    // 1. URL query param (set by HA ingress / direct links with ?token=)
     try {
-      // HA stores tokens under 'hassTokens' keyed by client ID
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('token')) return p.get('token');
+    } catch {}
+
+    // 2. hassTokens in localStorage (same-origin iframe or direct URL)
+    try {
       const raw = localStorage.getItem('hassTokens');
-      if (!raw) return null;
-      const entries = Object.values(JSON.parse(raw));
-      return entries[0]?.access_token || entries[0]?.token || null;
-    } catch { return null; }
+      if (raw) {
+        const entries = Object.values(JSON.parse(raw));
+        const tok = entries[0]?.access_token || entries[0]?.token;
+        if (tok) return tok;
+      }
+    } catch {}
+
+    // 3. Parent window localStorage (when running inside HA iframe)
+    try {
+      const raw = window.parent.localStorage.getItem('hassTokens');
+      if (raw) {
+        const entries = Object.values(JSON.parse(raw));
+        const tok = entries[0]?.access_token || entries[0]?.token;
+        if (tok) return tok;
+      }
+    } catch {}
+
+    // 4. hassio-style ingress token in meta tag injected by HA
+    try {
+      const meta = document.querySelector('meta[name="ha-access-token"]');
+      if (meta) return meta.content;
+    } catch {}
+
+    return null;
   }
 </script>
 </body>
