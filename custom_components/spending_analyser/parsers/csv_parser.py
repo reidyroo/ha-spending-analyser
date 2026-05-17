@@ -259,6 +259,31 @@ class _NewdayJLProfile(_Profile):
         )
 
 
+class _BarclaysProfile(_Profile):
+    """Barclays Bank.
+
+    Headers: Date, Type, Merchant/Description, Debit/Credit, Balance
+    Single signed amount column; may have leading metadata rows before the header.
+    """
+    name = "barclays"
+
+    def match(self, headers: list[str]) -> bool:
+        h = {h.strip().lower() for h in headers}
+        return "debit/credit" in h and "date" in h
+
+    def parse_row(self, row: dict[str, str]) -> ParsedTransaction:
+        date     = _parse_date(row["Date"])
+        merchant = row.get("Merchant/Description", "").strip()
+        tx_type  = row.get("Type", "").strip()
+        # Prefer Merchant/Description; fall back to Type if it looks redacted/empty
+        description = (
+            merchant if merchant and not all(c in "* -" for c in merchant)
+            else tx_type
+        )
+        amount = _parse_amount(row.get("Debit/Credit", "0"))
+        return ParsedTransaction(date=date, description=description, amount=amount, raw=dict(row))
+
+
 class _GenericProfile(_Profile):
     """Fallback: looks for common column names and maps them."""
     name = "generic"
@@ -266,8 +291,8 @@ class _GenericProfile(_Profile):
     # Candidate column names for each field
     _DATE_COLS = ["date", "transaction date", "txn date", "posted date", "value date"]
     _DESC_COLS = ["description", "details", "narration", "memo", "reference",
-                  "transaction description", "merchant"]
-    _AMT_COLS  = ["amount", "net amount", "transaction amount"]
+                  "transaction description", "merchant", "merchant/description"]
+    _AMT_COLS  = ["amount", "net amount", "transaction amount", "debit/credit"]
     _DEBIT_COLS = ["debit", "debit amount", "withdrawal"]
     _CREDIT_COLS = ["credit", "credit amount", "deposit"]
 
@@ -321,11 +346,33 @@ _PROFILES: list[_Profile] = [
     _MidataProfile(),
     _NewdayJLProfile(),
     _FirstDirectProfile(),
+    _BarclaysProfile(),
     _ANZProfile(),
     _NABProfile(),
     _WestpacProfile(),
     _STGeorgeBOQProfile(),
 ]
+
+# Header keywords used to detect where the real CSV data begins
+_HEADER_KEYWORDS = {"date", "amount", "debit", "credit", "description", "merchant",
+                    "balance", "narration", "transaction"}
+
+
+def _strip_preamble(text: str, delimiter: str) -> str:
+    """Skip leading metadata rows (e.g. 'Account Number: xxx') to find the real header.
+
+    Scans line by line until a line contains at least one recognised column-name keyword,
+    then returns the text from that line onwards.
+    """
+    lines = text.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        cells = {c.strip().strip('"').lower() for c in line.split(delimiter)}
+        if cells & _HEADER_KEYWORDS:
+            if i == 0:
+                return text  # already at the header — no stripping needed
+            _LOGGER.debug("CSV preamble: skipped %d leading row(s)", i)
+            return "".join(lines[i:])
+    return text  # no header found — return unchanged and let the parser handle it
 
 
 class CsvParser:
@@ -333,11 +380,23 @@ class CsvParser:
         self._generic = _GenericProfile(column_map)
 
     def parse(self, text: str) -> list[ParsedTransaction]:
-        # Strip BOM and normalise line endings
+        # Strip BOM
         text = text.lstrip("﻿")
 
-        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",\t;|")
-        reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+        # Sniff delimiter on the raw text first (preamble rows usually use the same delimiter)
+        try:
+            dialect = csv.Sniffer().sniff(text[:2048], delimiters=",\t;|")
+        except csv.Error:
+            dialect = csv.excel
+
+        # Remove leading metadata rows (e.g. Barclays "Account Number: xxx" header)
+        text = _strip_preamble(text, dialect.delimiter)
+
+        # Re-sniff after stripping in case the preamble confused the dialect detector
+        try:
+            dialect = csv.Sniffer().sniff(text[:4096], delimiters=",\t;|")
+        except csv.Error:
+            pass
 
         # CommBank has no headers — detect by first data row
         first_line = text.splitlines()[0]

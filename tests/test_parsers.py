@@ -9,8 +9,8 @@ from custom_components.spending_analyser.parsers.qif_parser import QifParser
 import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 from samples import (
-    ANZ_CSV, FIRST_DIRECT_CSV, MIDATA_CSV, NAB_CSV,
-    NEWDAY_JL_CSV, OFX_SGML, OFX_XML, QIF_CONTENT, WESTPAC_CSV,
+    ANZ_CSV, BARCLAYS_CSV, BARCLAYS_CSV_PREAMBLE, FIRST_DIRECT_CSV,
+    MIDATA_CSV, NAB_CSV, NEWDAY_JL_CSV, OFX_SGML, OFX_XML, QIF_CONTENT, WESTPAC_CSV,
 )
 
 
@@ -74,6 +74,41 @@ class TestNewdayJLCsv:
     def test_description_is_clean_merchant_name(self):
         txs = CsvParser().parse(NEWDAY_JL_CSV)
         assert txs[0].description == "Costa Coffee"
+
+
+class TestBarclaysCsv:
+    def test_detects_format(self):
+        txs = CsvParser().parse(BARCLAYS_CSV)
+        assert len(txs) == 3
+
+    def test_debit_negative(self):
+        txs = CsvParser().parse(BARCLAYS_CSV)
+        costco = [t for t in txs if "Costco" in t.description][0]
+        assert costco.amount == pytest.approx(-123.74)
+
+    def test_credit_positive(self):
+        txs = CsvParser().parse(BARCLAYS_CSV)
+        salary = [t for t in txs if "SALARY" in t.description][0]
+        assert salary.amount == pytest.approx(2160.00)
+
+    def test_date_normalised(self):
+        txs = CsvParser().parse(BARCLAYS_CSV)
+        assert txs[0].date == "2026-04-15"
+
+    def test_preamble_stripped(self):
+        txs = CsvParser().parse(BARCLAYS_CSV_PREAMBLE)
+        assert len(txs) == 2
+
+    def test_preamble_amounts_correct(self):
+        txs = CsvParser().parse(BARCLAYS_CSV_PREAMBLE)
+        costco = [t for t in txs if "Costco" in t.description][0]
+        assert costco.amount == pytest.approx(-123.74)
+
+    def test_trailing_metadata_ignored(self):
+        # "Arranged Overdraft Limit" row should be skipped, not raise
+        txs = CsvParser().parse(BARCLAYS_CSV_PREAMBLE)
+        descriptions = [t.description for t in txs]
+        assert not any("Overdraft" in d for d in descriptions)
 
 
 class TestAnzCsv:

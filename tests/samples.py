@@ -21,6 +21,23 @@ NEWDAY_JL_CSV = (
     "10/05/2026,Refund,AMAZON REFUND,-5.00\n"
 )
 
+BARCLAYS_CSV = (
+    "Date,Type,Merchant/Description,Debit/Credit,Balance\n"
+    "15/04/2026,MAS,Costco Wholesale,-£123.74,£52.49\n"
+    "07/04/2026,DD,NATIONWIDE B S,-£596.43,-£746.10\n"
+    "07/04/2026,CR,SALARY,\"£2,160.00\",\"£2,346.99\"\n"
+)
+
+BARCLAYS_CSV_PREAMBLE = (
+    "Account Number:,12345678,,,\n"
+    ",,,,\n"
+    "Date,Type,Merchant/Description,Debit/Credit,Balance\n"
+    "15/04/2026,MAS,Costco Wholesale,\"-£123.74\",£52.49\n"
+    "07/04/2026,CR,SALARY,\"£2,160.00\",\"£2,346.99\"\n"
+    ",,,,\n"
+    "Arranged Overdraft Limit,17/05/2026,£0.00,,\n"
+)
+
 ANZ_CSV = (
     "Date,Amount,Description\n"
     "15/05/2026,-65.40,Woolworths\n"
