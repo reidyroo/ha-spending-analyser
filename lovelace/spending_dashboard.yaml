@@ -32,29 +32,28 @@ views:
         uncategorised_entity: sensor.spending_analyser_uncategorised_transactions
         total_entity:         sensor.spending_analyser_total_transactions
 
-      # ── Quick stats row ───────────────────────────────────────────
-      - type: horizontal-stack
+      # ── Quick stats — stacked so titles aren't truncated ──────────
+      - type: vertical-stack
         cards:
           - type: entity
             entity: sensor.spending_analyser_monthly_spending
-            name: This Month
+            name: Spending This Month
             icon: mdi:cash-minus
 
           - type: entity
             entity: sensor.spending_analyser_monthly_income
-            name: Income
+            name: Income This Month
             icon: mdi:cash-plus
 
           - type: entity
             entity: sensor.spending_analyser_monthly_net
-            name: Net
+            name: Net This Month
             icon: mdi:bank-transfer
 
-      # ── Top category ──────────────────────────────────────────────
-      - type: entity
-        entity: sensor.spending_analyser_top_spending_category
-        name: Top Spending Category
-        icon: mdi:podium-gold
+          - type: entity
+            entity: sensor.spending_analyser_top_spending_category
+            name: Top Spending Category
+            icon: mdi:podium-gold
 
       # ── Uncategorised alert (only visible when count > 0) ─────────
       - type: conditional
@@ -67,13 +66,22 @@ views:
           content: >
             ## ⚠ {{ states('sensor.spending_analyser_uncategorised_transactions') }} transactions need categorising
 
-            Use **Developer Tools → Services → spending_analyser.recategorise**
-            to assign categories. Each correction teaches the AI for future imports.
+            Open **Review Transactions** in the sidebar to assign categories with AI suggestions.
+            Each correction teaches the AI for future imports.
 
-      # ── Import shortcut ───────────────────────────────────────────
-      - type: button
-        name: Import Statement
-        icon: mdi:file-upload-outline
-        tap_action:
-          action: navigate
-          navigation_path: /spending-upload
+      # ── Action buttons ────────────────────────────────────────────
+      - type: horizontal-stack
+        cards:
+          - type: button
+            name: Import Statement
+            icon: mdi:file-upload-outline
+            tap_action:
+              action: navigate
+              navigation_path: /spending-upload
+
+          - type: button
+            name: Review Transactions
+            icon: mdi:table-check
+            tap_action:
+              action: navigate
+              navigation_path: /spending-review
