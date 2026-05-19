@@ -4,6 +4,16 @@ A local-first Home Assistant integration for tracking and analysing household sp
 
 [![CI](https://github.com/reidyroo/ha-spending-analyser/actions/workflows/ci.yml/badge.svg)](https://github.com/reidyroo/ha-spending-analyser/actions/workflows/ci.yml)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![status](https://img.shields.io/badge/status-alpha%20%E2%80%94%20experimental-orange)](https://github.com/reidyroo/ha-spending-analyser/releases)
+
+> **⚠ Alpha — Experimental**
+>
+> This integration is under active development. Breaking changes, data schema updates, and significant rewrites may occur between releases without notice.
+>
+> - **Use at your own risk.** It is intended for learning and personal experimentation, not as a replacement for proper financial software.
+> - **Not financial advice.** Nothing this integration reports should be relied upon for financial decisions.
+> - **AI makes mistakes.** Transaction categorisation is performed by a local language model and will be wrong sometimes. Always review AI suggestions before acting on them.
+> - **Not recommended for production HA installs** until a stable v1.0 release is tagged.
 
 ---
 
@@ -108,7 +118,7 @@ The file must be within your HA config directory.
 
 | Format | Auto-detected banks |
 |---|---|
-| CSV | midata (UK), First Direct, John Lewis/Newday, CommBank, ANZ, NAB, Westpac, St George/BOQ, generic |
+| CSV | midata (UK), Barclays, First Direct, John Lewis/Newday, CommBank, ANZ, NAB, Westpac, St George/BOQ, generic fallback |
 | OFX / QFX | All banks supporting OFX v1 (SGML) or v2 (XML) |
 | QIF | Quicken Interchange Format |
 
